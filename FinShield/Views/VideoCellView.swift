@@ -145,13 +145,6 @@ struct VideoCellView: View {
     }
 
     private func setupPlayer() {
-        do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
-            try AVAudioSession.sharedInstance().setActive(true)
-        } catch {
-            print("Failed to set audio session category: \(error)")
-        }
-
         isLoading = true
         let asset = AVURLAsset(url: video.videoURL, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
         asset.loadValuesAsynchronously(forKeys: ["playable"]) {
