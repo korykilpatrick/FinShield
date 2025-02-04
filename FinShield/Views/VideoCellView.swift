@@ -1,6 +1,7 @@
 import SwiftUI
 import AVKit
 import AVFoundation
+import FirebaseFirestore
 
 struct VideoCellView: View {
     let video: Video
@@ -13,6 +14,9 @@ struct VideoCellView: View {
     @State private var likesCount = 0
     @State private var commentsCount = 0
     @State private var sharesCount = 0
+    @State private var showComments = false
+    @State private var commentsListener: ListenerRegistration?
+    private let db = Firestore.firestore()
 
     var body: some View {
         GeometryReader { geometry in
@@ -102,7 +106,7 @@ struct VideoCellView: View {
                                     .foregroundColor(.white)
                             }
                             VStack(spacing: 4) {
-                                Button(action: {}) {
+                                Button(action: { showComments = true }) {
                                     Image(systemName: "bubble.right")
                                         .font(.system(size: 30))
                                         .foregroundColor(.white)
@@ -134,11 +138,22 @@ struct VideoCellView: View {
         }
         .onAppear { setupPlayer() }
         .onDisappear { cleanupPlayer() }
+        .sheet(isPresented: $showComments) {
+            CommentsView(videoID: video.id)
+        }
     }
     
     private func setupPlayer() {
         let setupStartTime = Date()
         print("[\(setupStartTime)] setupPlayer() called for video \(video.id)")
+        
+        // Setup comments count listener
+        commentsListener = db.collection("videos").document(video.id)
+            .collection("comments")
+            .addSnapshotListener { snapshot, error in
+                guard let snapshot = snapshot else { return }
+                commentsCount = snapshot.documents.count
+            }
         
         if let preloadedPlayer = preloadedPlayer {
             isLoading = false
@@ -217,6 +232,7 @@ struct VideoCellView: View {
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         NotificationCenter.default.removeObserver(self)
+        commentsListener?.remove()  // Remove comments listener
         player = nil
         isLoading = false
         print("[\(Date())] cleanupPlayer() called for video \(video.id)")
