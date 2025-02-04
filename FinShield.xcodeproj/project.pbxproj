@@ -14,11 +14,13 @@
 		976EDC682D5197B600589069 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 976EDC672D5197B600589069 /* FirebaseDatabase */; };
 		976EDC6E2D5197B600589069 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 976EDC6D2D5197B600589069 /* FirebaseStorage */; };
 		976EDC702D51AD3200589069 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 976EDC6F2D51AD3200589069 /* GoogleService-Info.plist */; };
+		976EDC722D52B30300589069 /* upload_youtube_hls.sh in Resources */ = {isa = PBXBuildFile; fileRef = 976EDC712D52B2F600589069 /* upload_youtube_hls.sh */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		976EDC162D51714800589069 /* FinShield.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FinShield.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		976EDC6F2D51AD3200589069 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		976EDC712D52B2F600589069 /* upload_youtube_hls.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = upload_youtube_hls.sh; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -49,6 +51,7 @@
 		976EDC0D2D51714800589069 = {
 			isa = PBXGroup;
 			children = (
+				976EDC712D52B2F600589069 /* upload_youtube_hls.sh */,
 				976EDC6F2D51AD3200589069 /* GoogleService-Info.plist */,
 				976EDC182D51714800589069 /* FinShield */,
 				976EDC172D51714800589069 /* Products */,
@@ -136,6 +139,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				976EDC722D52B30300589069 /* upload_youtube_hls.sh in Resources */,
 				976EDC702D51AD3200589069 /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

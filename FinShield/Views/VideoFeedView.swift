@@ -27,9 +27,11 @@ struct VideoFeedView: View {
                 .ignoresSafeArea()
                 .onAppear {
                     currentIndex = totalCount / 2
+                    print("[\(Date())] VideoFeedView onAppear: currentIndex set to \(currentIndex)")
                 }
                 .onChange(of: currentIndex) { newIndex in
                     let mod = newIndex % viewModel.videos.count
+                    print("[\(Date())] currentIndex changed to \(newIndex) (mod index \(mod))")
                     // Preload five videos: current, two before, and two after.
                     viewModel.preloadVideo(at: mod - 2)
                     viewModel.preloadVideo(at: mod - 1)
@@ -39,5 +41,11 @@ struct VideoFeedView: View {
                 }
             }
         }
+    }
+}
+
+struct VideoFeedView_Previews: PreviewProvider {
+    static var previews: some View {
+        VideoFeedView()
     }
 }

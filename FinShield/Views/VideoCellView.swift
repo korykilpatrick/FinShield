@@ -21,10 +21,14 @@ struct VideoCellView: View {
                     if let player = player {
                         CustomVideoPlayer(player: player)
                             .onAppear {
+                                print("[\(Date())] CustomVideoPlayer appeared for video \(video.id)")
                                 player.play()
                                 player.automaticallyWaitsToMinimizeStalling = true
                             }
-                            .onDisappear { player.pause() }
+                            .onDisappear {
+                                print("[\(Date())] CustomVideoPlayer disappeared for video \(video.id)")
+                                player.pause()
+                            }
                     } else if isLoading {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
@@ -51,7 +55,7 @@ struct VideoCellView: View {
                     .zIndex(2)
                 }
                 
-                // Your overlay UI remains unchanged...
+                // Overlay UI (omitted for brevity)
                 VStack {
                     Spacer()
                     HStack(alignment: .bottom) {
@@ -133,31 +137,42 @@ struct VideoCellView: View {
     }
     
     private func setupPlayer() {
-        // Use the cached, preloaded player if available.
+        let setupStartTime = Date()
+        print("[\(setupStartTime)] setupPlayer() called for video \(video.id)")
+        
         if let preloadedPlayer = preloadedPlayer {
             isLoading = false
             playerError = nil
             player = preloadedPlayer
+            let setupEndTime = Date()
+            let elapsed = setupEndTime.timeIntervalSince(setupStartTime)
+            print("[\(setupEndTime)] Used preloaded player; setup complete in \(elapsed)s for video \(video.id)")
         } else {
-            // Fallback: Load the asset asynchronously, ensuring both "playable" and "preferredTransform" are ready.
             isLoading = true
             let asset = AVURLAsset(url: video.videoURL, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
             let keys = ["playable", "preferredTransform"]
+            print("[\(Date())] Fallback: starting async load of asset keys for video \(video.id)")
+            
             asset.loadValuesAsynchronously(forKeys: keys) {
                 DispatchQueue.main.async {
                     var allLoaded = true
                     for key in keys {
                         var error: NSError?
                         let status = asset.statusOfValue(forKey: key, error: &error)
+                        let keyLoadedTime = Date()
+                        let elapsed = keyLoadedTime.timeIntervalSince(setupStartTime)
+                        print("[\(keyLoadedTime)] Fallback: key '\(key)' status \(status) for video \(self.video.id), elapsed: \(elapsed)s")
                         if status != .loaded {
                             allLoaded = false
-                            print("Failed to load key \(key): \(error?.localizedDescription ?? "unknown error")")
+                            print("[\(Date())] Fallback: failed to load key \(key) for video \(self.video.id) with error: \(error?.localizedDescription ?? "unknown error")")
                             break
                         }
                     }
                     if allLoaded {
                         let playerItem = AVPlayerItem(asset: asset)
                         playerItem.preferredForwardBufferDuration = 5.0
+                        // Set the preferredPeakBitRate to enable adaptive streaming.
+                        playerItem.preferredPeakBitRate = 500_000
                         let newPlayer = AVPlayer(playerItem: playerItem)
                         newPlayer.actionAtItemEnd = .none
                         
@@ -182,11 +197,16 @@ struct VideoCellView: View {
                         
                         self.player = newPlayer
                         self.isLoading = false
+                        let setupEndTime = Date()
+                        let elapsed = setupEndTime.timeIntervalSince(setupStartTime)
+                        print("[\(setupEndTime)] Fallback: setup complete for video \(self.video.id) in \(elapsed)s")
                     } else {
                         self.playerError = NSError(domain: "", code: -1, userInfo: [
                             NSLocalizedDescriptionKey: "Failed to load necessary asset keys."
                         ])
                         self.isLoading = false
+                        let elapsed = Date().timeIntervalSince(setupStartTime)
+                        print("[\(Date())] Fallback: setup failed for video \(self.video.id) in \(elapsed)s")
                     }
                 }
             }
@@ -199,9 +219,9 @@ struct VideoCellView: View {
         NotificationCenter.default.removeObserver(self)
         player = nil
         isLoading = false
+        print("[\(Date())] cleanupPlayer() called for video \(video.id)")
     }
 }
-
 
 // Custom VideoPlayer to prevent overlay issues
 struct CustomVideoPlayer: UIViewControllerRepresentable {
