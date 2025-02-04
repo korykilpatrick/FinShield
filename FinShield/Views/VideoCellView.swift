@@ -3,8 +3,8 @@ import AVKit
 
 struct VideoCellView: View {
     let video: Video
-    @State private var player: AVPlayer? = nil
-    @State private var playerError: Error? = nil
+    @State private var player: AVPlayer?
+    @State private var playerError: Error?
     @State private var isLoading = true
 
     var body: some View {
@@ -13,10 +13,9 @@ struct VideoCellView: View {
                 VideoPlayer(player: player)
                     .aspectRatio(contentMode: .fill)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                    .ignoresSafeArea() // Fill the screen
+                    .ignoresSafeArea()
                     .onAppear {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { player.play() }
+                        player.play()
                         player.automaticallyWaitsToMinimizeStalling = true
                     }
                     .onDisappear { player.pause() }
@@ -27,10 +26,9 @@ struct VideoCellView: View {
                     .background(Color.black)
                     .ignoresSafeArea()
             } else {
-                Color.black
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .ignoresSafeArea()
+                Color.black.ignoresSafeArea()
             }
+
             if let error = playerError {
                 VStack {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -38,7 +36,6 @@ struct VideoCellView: View {
                         .font(.largeTitle)
                     Text("Error loading video")
                         .foregroundColor(.white)
-                        .padding(.top, 4)
                 }
                 .padding()
                 .background(Color.black.opacity(0.7))
@@ -51,8 +48,7 @@ struct VideoCellView: View {
 
     private func setupPlayer() {
         isLoading = true
-        let assetOptions = [AVURLAssetPreferPreciseDurationAndTimingKey: true]
-        let asset = AVURLAsset(url: video.videoURL, options: assetOptions)
+        let asset = AVURLAsset(url: video.videoURL, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
         asset.loadValuesAsynchronously(forKeys: ["playable"]) {
             DispatchQueue.main.async {
                 var error: NSError?
@@ -61,8 +57,8 @@ struct VideoCellView: View {
                 case .loaded:
                     let playerItem = AVPlayerItem(asset: asset)
                     playerItem.preferredForwardBufferDuration = 2.0
-                    let player = AVPlayer(playerItem: playerItem)
-                    player.actionAtItemEnd = .none
+                    let newPlayer = AVPlayer(playerItem: playerItem)
+                    newPlayer.actionAtItemEnd = .none
 
                     NotificationCenter.default.addObserver(
                         forName: .AVPlayerItemFailedToPlayToEndTime,
@@ -71,7 +67,6 @@ struct VideoCellView: View {
                     ) { notification in
                         if let err = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error {
                             self.playerError = err
-                            print("AVPlayer error: \(err.localizedDescription)")
                         }
                     }
 
@@ -80,19 +75,23 @@ struct VideoCellView: View {
                         object: playerItem,
                         queue: .main
                     ) { _ in
-                        player.seek(to: .zero)
-                        player.play()
+                        newPlayer.seek(to: .zero)
+                        newPlayer.play()
                     }
 
-                    self.player = player
+                    self.player = newPlayer
                     self.isLoading = false
 
                 case .failed:
-                    self.playerError = error ?? NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to load video"])
+                    self.playerError = error ?? NSError(domain: "", code: -1, userInfo: [
+                        NSLocalizedDescriptionKey: "Failed to load video"
+                    ])
                     self.isLoading = false
 
                 default:
-                    self.playerError = NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unknown error loading video"])
+                    self.playerError = NSError(domain: "", code: -1, userInfo: [
+                        NSLocalizedDescriptionKey: "Unknown error loading video"
+                    ])
                     self.isLoading = false
                 }
             }
@@ -102,8 +101,9 @@ struct VideoCellView: View {
     private func cleanupPlayer() {
         player?.pause()
         player?.replaceCurrentItem(with: nil)
-        player = nil
         NotificationCenter.default.removeObserver(self)
+        player = nil
         isLoading = false
     }
 }
+
