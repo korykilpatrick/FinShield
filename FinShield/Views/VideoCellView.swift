@@ -4,6 +4,8 @@ import AVFoundation
 
 struct VideoCellView: View {
     let video: Video
+    let preloadedPlayer: AVPlayer?
+    
     @State private var player: AVPlayer?
     @State private var playerError: Error?
     @State private var isLoading = true
@@ -15,8 +17,7 @@ struct VideoCellView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
-                // Video Player Layer
-                ZStack {
+                Group {
                     if let player = player {
                         CustomVideoPlayer(player: player)
                             .onAppear {
@@ -36,7 +37,6 @@ struct VideoCellView: View {
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .ignoresSafeArea()
 
-                // Error View
                 if let error = playerError {
                     VStack {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -50,23 +50,19 @@ struct VideoCellView: View {
                     .cornerRadius(12)
                     .zIndex(2)
                 }
-
-                // Overlays
+                
+                // Your overlay UI remains unchanged...
                 VStack {
                     Spacer()
-                    
                     HStack(alignment: .bottom) {
-                        // Left side: Caption and user info
                         VStack(alignment: .leading, spacing: 8) {
                             Text("@username")
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.white)
-                            
                             Text(video.caption)
                                 .font(.system(size: 14))
                                 .foregroundColor(.white)
                                 .lineLimit(2)
-                            
                             HStack {
                                 Image(systemName: "music.note")
                                     .font(.system(size: 14))
@@ -80,9 +76,7 @@ struct VideoCellView: View {
                         
                         Spacer()
                         
-                        // Right side: Action buttons
                         VStack(spacing: 20) {
-                            // Share Button
                             VStack(spacing: 4) {
                                 Button(action: {}) {
                                     Image(systemName: "arrowshape.turn.up.right")
@@ -93,8 +87,6 @@ struct VideoCellView: View {
                                     .font(.caption)
                                     .foregroundColor(.white)
                             }
-                            
-                            // Like Button
                             VStack(spacing: 4) {
                                 Button(action: { isLiked.toggle() }) {
                                     Image(systemName: isLiked ? "heart.fill" : "heart")
@@ -105,8 +97,6 @@ struct VideoCellView: View {
                                     .font(.caption)
                                     .foregroundColor(.white)
                             }
-                            
-                            // Comments Button
                             VStack(spacing: 4) {
                                 Button(action: {}) {
                                     Image(systemName: "bubble.right")
@@ -117,8 +107,6 @@ struct VideoCellView: View {
                                     .font(.caption)
                                     .foregroundColor(.white)
                             }
-                            
-                            // Profile Button
                             Button(action: {}) {
                                 Image(systemName: "person.circle.fill")
                                     .resizable()
@@ -143,59 +131,68 @@ struct VideoCellView: View {
         .onAppear { setupPlayer() }
         .onDisappear { cleanupPlayer() }
     }
-
+    
     private func setupPlayer() {
-        isLoading = true
-        let asset = AVURLAsset(url: video.videoURL, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
-        asset.loadValuesAsynchronously(forKeys: ["playable"]) {
-            DispatchQueue.main.async {
-                var error: NSError?
-                let status = asset.statusOfValue(forKey: "playable", error: &error)
-                switch status {
-                case .loaded:
-                    let playerItem = AVPlayerItem(asset: asset)
-                    playerItem.preferredForwardBufferDuration = 2.0
-                    let newPlayer = AVPlayer(playerItem: playerItem)
-                    newPlayer.actionAtItemEnd = .none
-
-                    NotificationCenter.default.addObserver(
-                        forName: .AVPlayerItemFailedToPlayToEndTime,
-                        object: playerItem,
-                        queue: .main
-                    ) { notification in
-                        if let err = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error {
-                            self.playerError = err
+        // Use the cached, preloaded player if available.
+        if let preloadedPlayer = preloadedPlayer {
+            isLoading = false
+            playerError = nil
+            player = preloadedPlayer
+        } else {
+            // Fallback: Load the asset asynchronously, ensuring both "playable" and "preferredTransform" are ready.
+            isLoading = true
+            let asset = AVURLAsset(url: video.videoURL, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+            let keys = ["playable", "preferredTransform"]
+            asset.loadValuesAsynchronously(forKeys: keys) {
+                DispatchQueue.main.async {
+                    var allLoaded = true
+                    for key in keys {
+                        var error: NSError?
+                        let status = asset.statusOfValue(forKey: key, error: &error)
+                        if status != .loaded {
+                            allLoaded = false
+                            print("Failed to load key \(key): \(error?.localizedDescription ?? "unknown error")")
+                            break
                         }
                     }
-
-                    NotificationCenter.default.addObserver(
-                        forName: .AVPlayerItemDidPlayToEndTime,
-                        object: playerItem,
-                        queue: .main
-                    ) { _ in
-                        newPlayer.seek(to: .zero)
-                        newPlayer.play()
+                    if allLoaded {
+                        let playerItem = AVPlayerItem(asset: asset)
+                        playerItem.preferredForwardBufferDuration = 5.0
+                        let newPlayer = AVPlayer(playerItem: playerItem)
+                        newPlayer.actionAtItemEnd = .none
+                        
+                        NotificationCenter.default.addObserver(
+                            forName: .AVPlayerItemFailedToPlayToEndTime,
+                            object: playerItem,
+                            queue: .main
+                        ) { notification in
+                            if let err = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error {
+                                self.playerError = err
+                            }
+                        }
+                        
+                        NotificationCenter.default.addObserver(
+                            forName: .AVPlayerItemDidPlayToEndTime,
+                            object: playerItem,
+                            queue: .main
+                        ) { _ in
+                            newPlayer.seek(to: .zero)
+                            newPlayer.play()
+                        }
+                        
+                        self.player = newPlayer
+                        self.isLoading = false
+                    } else {
+                        self.playerError = NSError(domain: "", code: -1, userInfo: [
+                            NSLocalizedDescriptionKey: "Failed to load necessary asset keys."
+                        ])
+                        self.isLoading = false
                     }
-
-                    self.player = newPlayer
-                    self.isLoading = false
-
-                case .failed:
-                    self.playerError = error ?? NSError(domain: "", code: -1, userInfo: [
-                        NSLocalizedDescriptionKey: "Failed to load video"
-                    ])
-                    self.isLoading = false
-
-                default:
-                    self.playerError = NSError(domain: "", code: -1, userInfo: [
-                        NSLocalizedDescriptionKey: "Unknown error loading video"
-                    ])
-                    self.isLoading = false
                 }
             }
         }
     }
-
+    
     private func cleanupPlayer() {
         player?.pause()
         player?.replaceCurrentItem(with: nil)
@@ -204,6 +201,7 @@ struct VideoCellView: View {
         isLoading = false
     }
 }
+
 
 // Custom VideoPlayer to prevent overlay issues
 struct CustomVideoPlayer: UIViewControllerRepresentable {
@@ -221,4 +219,3 @@ struct CustomVideoPlayer: UIViewControllerRepresentable {
         uiViewController.player = player
     }
 }
-

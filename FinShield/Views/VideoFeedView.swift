@@ -1,6 +1,5 @@
 import SwiftUI
 
-// VideoFeedView
 struct VideoFeedView: View {
     @StateObject var viewModel = VideoFeedViewModel()
     @State private var currentIndex = 0
@@ -16,30 +15,29 @@ struct VideoFeedView: View {
                 let totalCount = viewModel.videos.count * multiplier
                 TabView(selection: $currentIndex) {
                     ForEach(0..<totalCount, id: \.self) { index in
-                        VideoCellView(video: viewModel.videos[index % viewModel.videos.count])
-                            .tag(index)
+                        let modIndex = index % viewModel.videos.count
+                        VideoCellView(
+                            video: viewModel.videos[modIndex],
+                            preloadedPlayer: viewModel.getPreloadedPlayer(for: modIndex)
+                        )
+                        .tag(index)
                     }
                 }
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
                 .ignoresSafeArea()
-                // For iOS 16+, use .vertical() on PageTabViewStyle:
-                // .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never).vertical())
-                .onAppear { currentIndex = totalCount / 2 }
+                .onAppear {
+                    currentIndex = totalCount / 2
+                }
                 .onChange(of: currentIndex) { newIndex in
                     let mod = newIndex % viewModel.videos.count
-                    let prev = (mod - 1 + viewModel.videos.count) % viewModel.videos.count
-                    let next = (mod + 1) % viewModel.videos.count
-                    viewModel.preloadVideo(at: prev)
-                    viewModel.preloadVideo(at: next)
+                    // Preload five videos: current, two before, and two after.
+                    viewModel.preloadVideo(at: mod - 2)
+                    viewModel.preloadVideo(at: mod - 1)
+                    viewModel.preloadVideo(at: mod)
+                    viewModel.preloadVideo(at: mod + 1)
+                    viewModel.preloadVideo(at: mod + 2)
                 }
             }
         }
-    }
-}
-
-
-struct VideoFeedView_Previews: PreviewProvider {
-    static var previews: some View {
-        VideoFeedView()
     }
 }

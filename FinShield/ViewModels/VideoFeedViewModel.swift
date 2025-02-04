@@ -1,14 +1,22 @@
+//
+//  VideoFeedViewModel.swift
+//  FinShield
+//
+
 import Foundation
 import FirebaseFirestore
 import AVFoundation
 
-// VideoFeedViewModel
 class VideoFeedViewModel: ObservableObject {
     @Published var videos: [Video] = []
     private var db = Firestore.firestore()
-    private var preloadedAssets: [Int: AVAsset] = [:]
+    // Caches for preloaded player items and players.
+    private var preloadedItems: [Int: AVPlayerItem] = [:]
+    private var preloadedPlayers: [Int: AVPlayer] = [:]
 
-    init() { fetchVideos() }
+    init() {
+        fetchVideos()
+    }
 
     func fetchVideos() {
         db.collection("videos").addSnapshotListener { [weak self] snapshot, error in
@@ -26,18 +34,49 @@ class VideoFeedViewModel: ObservableObject {
 
     func preloadVideo(at index: Int) {
         guard index >= 0, index < videos.count else { return }
-        if preloadedAssets[index] == nil {
-            let asset = AVAsset(url: videos[index].videoURL)
-            preloadedAssets[index] = asset
-            let keys = ["playable", "duration"]
+        if preloadedItems[index] == nil {
+            let videoURL = videos[index].videoURL
+            let asset = AVURLAsset(url: videoURL, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+            // Preload keys including "preferredTransform" to avoid main-thread blocking later.
+            let keys = ["playable", "duration", "preferredTransform"]
             asset.loadValuesAsynchronously(forKeys: keys) {
-                self.cleanupOldPreloadedAssets(keepingIndex: index)
+                // Ensure each key is loaded.
+                for key in keys {
+                    var error: NSError?
+                    let status = asset.statusOfValue(forKey: key, error: &error)
+                    if status != .loaded {
+                        print("Failed to load key \(key) for asset \(videoURL): \(error?.localizedDescription ?? "unknown error")")
+                        return
+                    }
+                }
+                // All keys loaded—create an AVPlayerItem and cache it on the main thread.
+                DispatchQueue.main.async {
+                    let item = AVPlayerItem(asset: asset)
+                    item.preferredForwardBufferDuration = 5.0
+                    self.preloadedItems[index] = item
+                    // Create and cache a reusable AVPlayer instance.
+                    let player = AVPlayer(playerItem: item)
+                    player.actionAtItemEnd = .none
+                    self.preloadedPlayers[index] = player
+                    self.cleanupOldPreloadedAssets(keepingIndex: index)
+                }
             }
         }
     }
 
+    func getPreloadedItem(for index: Int) -> AVPlayerItem? {
+        return preloadedItems[index]
+    }
+    
+    func getPreloadedPlayer(for index: Int) -> AVPlayer? {
+        return preloadedPlayers[index]
+    }
+
     private func cleanupOldPreloadedAssets(keepingIndex currentIndex: Int) {
-        let range = max(0, currentIndex - 1)...min(videos.count - 1, currentIndex + 1)
-        preloadedAssets = preloadedAssets.filter { range.contains($0.key) }
+        // Keep a window of five videos: current, two before, and two after.
+        let low = max(0, currentIndex - 2)
+        let high = min(videos.count - 1, currentIndex + 2)
+        preloadedItems = preloadedItems.filter { key, _ in key >= low && key <= high }
+        preloadedPlayers = preloadedPlayers.filter { key, _ in key >= low && key <= high }
     }
 }
