@@ -2,6 +2,7 @@ import SwiftUI
 
 struct VideoFeedView: View {
     @StateObject var viewModel = VideoFeedViewModel()
+    @State private var currentIndex = 0
     
     var body: some View {
         GeometryReader { geo in
@@ -14,27 +15,32 @@ struct VideoFeedView: View {
                         .background(Color.red)
                         .cornerRadius(8)
                 }
-                .frame(width: geo.size.width, height: geo.size.height)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
             } else {
-                // Use a rotated TabView to mimic TikTok-style vertical paging.
-                TabView {
-                    ForEach(viewModel.videos) { video in
+                TabView(selection: $currentIndex) {
+                    ForEach(Array(viewModel.videos.enumerated()), id: \.element.id) { index, video in
                         VideoCellView(video: video)
                             .frame(width: geo.size.width, height: geo.size.height)
-                            .clipped()
-                            // Rotate the video view 90° so that the TabView can be rotated back.
-                            .rotationEffect(.degrees(90))
-                            .frame(width: geo.size.width, height: geo.size.height)
+                            .tag(index)  // Re-add tag for selection tracking
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
-                // Rotate the TabView to allow vertical swiping.
-                .rotationEffect(.degrees(-90))
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+                .onChange(of: currentIndex) { newIndex in
+                    // Preload next and previous videos
+                    if newIndex > 0 {
+                        viewModel.preloadVideo(at: newIndex - 1)
+                    }
+                    if newIndex < viewModel.videos.count - 1 {
+                        viewModel.preloadVideo(at: newIndex + 1)
+                    }
+                }
             }
         }
-        .ignoresSafeArea() // Use full screen.
+        .ignoresSafeArea()
+        .statusBar(hidden: true)  // Hide status bar for true full screen
+        .background(Color.black)
     }
 }
 
