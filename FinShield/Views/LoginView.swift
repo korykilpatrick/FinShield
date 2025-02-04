@@ -1,13 +1,6 @@
 import SwiftUI
 
 struct LoginView: View {
-    var body: some View {
-        Text("Hello World")
-    }
-}
-
-/*
-struct LoginView: View {
     @EnvironmentObject var authVM: AuthenticationViewModel
     
     var body: some View {
@@ -32,4 +25,3 @@ struct LoginView: View {
         .padding()
     }
 }
-*/
