@@ -32,6 +32,25 @@ struct VideoCellView: View {
     /// Listener registration for comments updates.
     @State private var commentsListener: ListenerRegistration?
     
+    /// Determines if the caption is expanded (shows at least a partial expansion).
+    @State private var isCaptionExpanded = false
+    /// Determines if the caption is fully expanded (shows all text).
+    @State private var isCaptionFullyExpanded = false
+    
+    /// Computes the caption text based on the expansion state.
+    /// - When collapsed: shows the first 50 characters with an ellipsis if needed.
+    /// - When expanded partially: shows the first 200 characters with an ellipsis if the caption is long.
+    /// - When fully expanded: shows the full caption.
+    private var displayedCaption: String {
+        if !isCaptionExpanded {
+            return video.caption.count > 50 ? String(video.caption.prefix(50)) + "..." : video.caption
+        } else if !isCaptionFullyExpanded {
+            return video.caption.count > 200 ? String(video.caption.prefix(200)) + "..." : video.caption
+        } else {
+            return video.caption
+        }
+    }
+    
     /// Firestore database reference.
     private let db = Firestore.firestore()
 
@@ -44,7 +63,6 @@ struct VideoCellView: View {
                 
                 Group {
                     if let player = player {
-                        // Display the video using the custom AVPlayer wrapper.
                         CustomVideoPlayer(player: player)
                             .onAppear {
                                 print("[\(Date())] Playing video \(video.id)")
@@ -55,13 +73,11 @@ struct VideoCellView: View {
                                 player.pause()
                             }
                     } else if isLoading {
-                        // Show a loading spinner while the video is being prepared.
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(Color.black)
                     } else {
-                        // Fallback to a black background if no video is available.
                         Color.black
                     }
                 }
@@ -91,23 +107,75 @@ struct VideoCellView: View {
                     HStack(alignment: .bottom) {
                         // Left side: Video metadata
                         VStack(alignment: .leading, spacing: 8) {
-                            // Display the username with a leading '@'
-                            Text("@\(video.username)")
+                            // Display the username without an '@' symbol.
+                            Text(video.username)
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.white)
                             
-                            // Display the video title
+                            // Display the video title.
                             Text(video.videoTitle)
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundColor(.white)
                             
-                            // Display the video caption (limit to two lines)
-                            Text(video.caption)
-                                .font(.system(size: 14))
-                                .foregroundColor(.white)
-                                .lineLimit(2)
+                            // Display the video caption with truncation and expansion behavior.
+                            VStack(alignment: .leading, spacing: 4) {
+                                // Tapping on the caption toggles a partial expansion.
+                                Text(displayedCaption)
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white)
+                                    .onTapGesture {
+                                        if !isCaptionExpanded {
+                                            withAnimation { isCaptionExpanded = true }
+                                        }
+                                    }
+                                
+                                // If the caption is expandable, show buttons to control its state.
+                                if video.caption.count > 50 && isCaptionExpanded {
+                                    if video.caption.count > 200 {
+                                        if isCaptionFullyExpanded {
+                                            // Fully expanded: show only "Show Less".
+                                            Button("Show Less") {
+                                                withAnimation {
+                                                    isCaptionExpanded = false
+                                                    isCaptionFullyExpanded = false
+                                                }
+                                            }
+                                            .font(.caption)
+                                            .foregroundColor(.blue)
+                                        } else {
+                                            // Partially expanded: show both "Show More" and "Show Less" side by side.
+                                            HStack {
+                                                Button("Show More") {
+                                                    withAnimation { isCaptionFullyExpanded = true }
+                                                }
+                                                .font(.caption)
+                                                .foregroundColor(.blue)
+                                                
+                                                Button("Show Less") {
+                                                    withAnimation {
+                                                        isCaptionExpanded = false
+                                                        isCaptionFullyExpanded = false
+                                                    }
+                                                }
+                                                .font(.caption)
+                                                .foregroundColor(.blue)
+                                            }
+                                        }
+                                    } else {
+                                        // Caption is expanded and its length is <= 200: show only "Show Less".
+                                        Button("Show Less") {
+                                            withAnimation {
+                                                isCaptionExpanded = false
+                                                isCaptionFullyExpanded = false
+                                            }
+                                        }
+                                        .font(.caption)
+                                        .foregroundColor(.blue)
+                                    }
+                                }
+                            }
                             
-                            // Display a relative timestamp (e.g., "5 minutes ago")
+                            // Display a relative timestamp (e.g., "5 minutes ago").
                             Text(video.timestamp, style: .relative)
                                 .font(.system(size: 12))
                                 .foregroundColor(.white)
@@ -117,12 +185,12 @@ struct VideoCellView: View {
                         
                         Spacer()
                         
-                        // Right side: Interactive action buttons
+                        // Right side: Interactive action buttons.
                         VStack(spacing: 20) {
-                            // Share button
+                            // Share button.
                             VStack(spacing: 4) {
                                 Button(action: {
-                                    // Share action can be implemented here.
+                                    // Implement share action here.
                                 }) {
                                     Image(systemName: "arrowshape.turn.up.right")
                                         .font(.system(size: 30))
@@ -132,7 +200,7 @@ struct VideoCellView: View {
                                     .font(.caption)
                                     .foregroundColor(.white)
                             }
-                            // Like button
+                            // Like button.
                             VStack(spacing: 4) {
                                 Button(action: { isLiked.toggle() }) {
                                     Image(systemName: isLiked ? "heart.fill" : "heart")
@@ -143,7 +211,7 @@ struct VideoCellView: View {
                                     .font(.caption)
                                     .foregroundColor(.white)
                             }
-                            // Comment button
+                            // Comment button.
                             VStack(spacing: 4) {
                                 Button(action: { showComments = true }) {
                                     Image(systemName: "bubble.right")
@@ -154,7 +222,7 @@ struct VideoCellView: View {
                                     .font(.caption)
                                     .foregroundColor(.white)
                             }
-                            // Profile button (or additional options)
+                            // Profile button (or additional options).
                             Button(action: {
                                 // Implement profile or additional actions here.
                             }) {
@@ -169,7 +237,6 @@ struct VideoCellView: View {
                     }
                 }
                 .background(
-                    // Gradient overlay for improved readability of metadata.
                     LinearGradient(
                         gradient: Gradient(colors: [.clear, .black.opacity(0.3)]),
                         startPoint: .top,
@@ -232,12 +299,10 @@ struct VideoCellView: View {
                             let item = AVPlayerItem(asset: asset)
                             item.preferredForwardBufferDuration = 5.0
                             
-                            // Configure AVPlayer for continuous playback.
                             let newPlayer = AVPlayer(playerItem: item)
                             newPlayer.actionAtItemEnd = .none
                             newPlayer.automaticallyWaitsToMinimizeStalling = true
                             
-                            // Observe for playback errors.
                             NotificationCenter.default.addObserver(
                                 forName: .AVPlayerItemFailedToPlayToEndTime,
                                 object: item,
@@ -247,7 +312,6 @@ struct VideoCellView: View {
                                     self.playerError = err
                                 }
                             }
-                            // Loop the video when it reaches the end.
                             NotificationCenter.default.addObserver(
                                 forName: .AVPlayerItemDidPlayToEndTime,
                                 object: item,
