@@ -1,6 +1,8 @@
 import SwiftUI
 import AVKit
 import FirebaseFirestore
+// Import the date utility.
+import Foundation  // DateUtils is in the same module
 
 /// A SwiftUI view representing a single video cell in the video feed.
 /// This view handles video playback, displays video metadata (username, title, caption, and timestamp),
@@ -12,24 +14,14 @@ struct VideoCellView: View {
     let preloadedPlayer: AVPlayer?
     
     // MARK: - State Properties
-    
-    /// The active AVPlayer instance.
     @State private var player: AVPlayer?
-    /// Any error encountered during player setup.
     @State private var playerError: Error?
-    /// Indicates whether the video is currently loading.
     @State private var isLoading = true
-    /// Tracks the liked state for UI purposes.
     @State private var isLiked = false
-    /// Number of likes (for display only).
     @State private var likesCount = 0
-    /// Number of comments (updated in real time).
     @State private var commentsCount = 0
-    /// Number of shares (for display only).
     @State private var sharesCount = 0
-    /// Controls the presentation of the comments sheet.
     @State private var showComments = false
-    /// Listener registration for comments updates.
     @State private var commentsListener: ListenerRegistration?
     
     /// Determines if the caption is expanded (shows at least a partial expansion).
@@ -39,7 +31,7 @@ struct VideoCellView: View {
     
     /// Computes the caption text based on the expansion state.
     /// - When collapsed: shows the first 50 characters with an ellipsis if needed.
-    /// - When expanded partially: shows the first 200 characters with an ellipsis if the caption is long.
+    /// - When partially expanded: shows the first 200 characters with an ellipsis if the caption is long.
     /// - When fully expanded: shows the full caption.
     private var displayedCaption: String {
         if !isCaptionExpanded {
@@ -53,14 +45,12 @@ struct VideoCellView: View {
     
     /// Firestore database reference.
     private let db = Firestore.firestore()
-
-    // MARK: - View Body
     
+    // MARK: - View Body
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
                 // MARK: Video Playback or Placeholder
-                
                 Group {
                     if let player = player {
                         CustomVideoPlayer(player: player)
@@ -85,7 +75,6 @@ struct VideoCellView: View {
                 .ignoresSafeArea()
                 
                 // MARK: Error Overlay
-                
                 if let error = playerError {
                     VStack {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -101,7 +90,6 @@ struct VideoCellView: View {
                 }
                 
                 // MARK: Metadata and Action Overlay
-                
                 VStack {
                     Spacer()
                     HStack(alignment: .bottom) {
@@ -119,7 +107,6 @@ struct VideoCellView: View {
                             
                             // Display the video caption with truncation and expansion behavior.
                             VStack(alignment: .leading, spacing: 4) {
-                                // Tapping on the caption toggles a partial expansion.
                                 Text(displayedCaption)
                                     .font(.system(size: 14))
                                     .foregroundColor(.white)
@@ -129,11 +116,9 @@ struct VideoCellView: View {
                                         }
                                     }
                                 
-                                // If the caption is expandable, show buttons to control its state.
                                 if video.caption.count > 50 && isCaptionExpanded {
                                     if video.caption.count > 200 {
                                         if isCaptionFullyExpanded {
-                                            // Fully expanded: show only "Show Less".
                                             Button("Show Less") {
                                                 withAnimation {
                                                     isCaptionExpanded = false
@@ -143,7 +128,6 @@ struct VideoCellView: View {
                                             .font(.caption)
                                             .foregroundColor(.blue)
                                         } else {
-                                            // Partially expanded: show both "Show More" and "Show Less" side by side.
                                             HStack {
                                                 Button("Show More") {
                                                     withAnimation { isCaptionFullyExpanded = true }
@@ -162,7 +146,6 @@ struct VideoCellView: View {
                                             }
                                         }
                                     } else {
-                                        // Caption is expanded and its length is <= 200: show only "Show Less".
                                         Button("Show Less") {
                                             withAnimation {
                                                 isCaptionExpanded = false
@@ -175,8 +158,8 @@ struct VideoCellView: View {
                                 }
                             }
                             
-                            // Display a relative timestamp (e.g., "5 minutes ago").
-                            Text(video.timestamp, style: .relative)
+                            // Display the date the video was posted using DateUtils.
+                            Text(DateUtils.formattedDate(from: video.timestamp))
                                 .font(.system(size: 12))
                                 .foregroundColor(.white)
                         }
@@ -187,7 +170,6 @@ struct VideoCellView: View {
                         
                         // Right side: Interactive action buttons.
                         VStack(spacing: 20) {
-                            // Share button.
                             VStack(spacing: 4) {
                                 Button(action: {
                                     // Implement share action here.
@@ -200,7 +182,7 @@ struct VideoCellView: View {
                                     .font(.caption)
                                     .foregroundColor(.white)
                             }
-                            // Like button.
+                            
                             VStack(spacing: 4) {
                                 Button(action: { isLiked.toggle() }) {
                                     Image(systemName: isLiked ? "heart.fill" : "heart")
@@ -211,7 +193,7 @@ struct VideoCellView: View {
                                     .font(.caption)
                                     .foregroundColor(.white)
                             }
-                            // Comment button.
+                            
                             VStack(spacing: 4) {
                                 Button(action: { showComments = true }) {
                                     Image(systemName: "bubble.right")
@@ -222,7 +204,7 @@ struct VideoCellView: View {
                                     .font(.caption)
                                     .foregroundColor(.white)
                             }
-                            // Profile button (or additional options).
+                            
                             Button(action: {
                                 // Implement profile or additional actions here.
                             }) {
@@ -248,29 +230,22 @@ struct VideoCellView: View {
         }
         .onAppear { setupPlayer() }
         .onDisappear { cleanupPlayer() }
-        // Present the comments view as a modal sheet.
         .sheet(isPresented: $showComments) {
             CommentsView(videoID: video.id)
         }
     }
     
     // MARK: - Player Setup and Cleanup
-    
-    /// Sets up the AVPlayer for video playback.
-    /// - If a preloaded player is available, it uses that directly.
-    /// - Otherwise, it loads the video asset asynchronously.
     private func setupPlayer() {
         let startTime = Date()
         print("[\(startTime)] setupPlayer => video \(video.id)")
         
-        // Listen for comment changes in Firestore.
         commentsListener = db.collection("videos").document(video.id)
             .collection("comments")
             .addSnapshotListener { snapshot, _ in
                 commentsCount = snapshot?.documents.count ?? 0
             }
         
-        // Use the preloaded player if provided.
         if let preloaded = preloadedPlayer {
             playerError = nil
             isLoading = false
