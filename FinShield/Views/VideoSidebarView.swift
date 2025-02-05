@@ -1,11 +1,3 @@
-//
-//  VideoSidebarView.swift
-//  FinShield
-//
-//  Created by Kory Kilpatrick on 2/5/25.
-//
-
-
 import SwiftUI
 
 struct VideoSidebarView: View {
@@ -13,23 +5,30 @@ struct VideoSidebarView: View {
     let numComments: Int
     let numBookmarks: Int
     let numShares: Int
+    let isLiked: Bool
+    let isBookmarked: Bool
+    let onLike: () -> Void
+    let onBookmark: () -> Void
 
     var body: some View {
         VStack(spacing: 20) {
-            // Heart (Likes)
+            // Like button
             VStack(spacing: 4) {
-                Button {
-                    // Toggle like action
-                } label: {
-                    Image(systemName: "heart")
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        onLike()
+                    }
+                }) {
+                    Image(systemName: isLiked ? "heart.fill" : "heart")
                         .font(.system(size: 30))
-                        .foregroundColor(.white)
+                        .foregroundColor(isLiked ? .red : .white)
+                        .scaleEffect(isLiked ? 1.2 : 1.0)
                 }
                 Text("\(numLikes)")
                     .font(.caption)
                     .foregroundColor(.white)
             }
-            // Comments
+            // Comments button
             VStack(spacing: 4) {
                 Button {
                     // Show comments action
@@ -42,20 +41,23 @@ struct VideoSidebarView: View {
                     .font(.caption)
                     .foregroundColor(.white)
             }
-            // Bookmark
+            // Bookmark button
             VStack(spacing: 4) {
-                Button {
-                    // Bookmark action
-                } label: {
-                    Image(systemName: "bookmark")
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        onBookmark()
+                    }
+                }) {
+                    Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
                         .font(.system(size: 30))
                         .foregroundColor(.white)
+                        .scaleEffect(isBookmarked ? 1.2 : 1.0)
                 }
                 Text("\(numBookmarks)")
                     .font(.caption)
                     .foregroundColor(.white)
             }
-            // Share
+            // Share button
             VStack(spacing: 4) {
                 Button {
                     // Share action
@@ -76,8 +78,17 @@ struct VideoSidebarView_Previews: PreviewProvider {
     static var previews: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            VideoSidebarView(numLikes: 1234, numComments: 56, numBookmarks: 78, numShares: 9)
-                .padding(.trailing, 10)
+            VideoSidebarView(
+                numLikes: 123,
+                numComments: 45,
+                numBookmarks: 67,
+                numShares: 8,
+                isLiked: false,
+                isBookmarked: false,
+                onLike: {},
+                onBookmark: {}
+            )
+            .padding(.trailing, 10)
         }
     }
 }

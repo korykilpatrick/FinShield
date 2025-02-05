@@ -10,15 +10,27 @@ struct VideoCellView: View {
     @State private var player: AVPlayer?
     @State private var playerError: Error?
     @State private var isLoading = true
+    
     @State private var isLiked = false
-    @State private var likesCount = 0
+    @State private var likesCount: Int
+    @State private var isBookmarked = false
+    @State private var bookmarksCount: Int
     @State private var commentsCount = 0
-    @State private var sharesCount = 0
+    @State private var sharesCount: Int
     @State private var showComments = false
     @State private var commentsListener: ListenerRegistration?
     
     @State private var isCaptionExpanded = false
     @State private var isCaptionFullyExpanded = false
+    
+    // Initialize state counts from the video object.
+    init(video: Video, preloadedPlayer: AVPlayer?) {
+        self.video = video
+        self.preloadedPlayer = preloadedPlayer
+        _likesCount = State(initialValue: video.numLikes)
+        _bookmarksCount = State(initialValue: video.numBookmarks)
+        _sharesCount = State(initialValue: video.numShares)
+    }
     
     private var displayedCaption: String {
         if !isCaptionExpanded {
@@ -149,12 +161,22 @@ struct VideoCellView: View {
                         
                         Spacer()
                         
-                        // Right: Sidebar (order: heart, comments, bookmark, share)
+                        // Right: Sidebar (heart, comments, bookmark, share)
                         VideoSidebarView(
-                            numLikes: video.numLikes ?? likesCount,
+                            numLikes: likesCount,
                             numComments: commentsCount,
-                            numBookmarks: video.numBookmarks ?? 0,
-                            numShares: video.numShares ?? sharesCount
+                            numBookmarks: bookmarksCount,
+                            numShares: sharesCount,
+                            isLiked: isLiked,
+                            isBookmarked: isBookmarked,
+                            onLike: {
+                                isLiked.toggle()
+                                likesCount += isLiked ? 1 : -1
+                            },
+                            onBookmark: {
+                                isBookmarked.toggle()
+                                bookmarksCount += isBookmarked ? 1 : -1
+                            }
                         )
                         .padding(.trailing)
                         .padding(.bottom, 20)
