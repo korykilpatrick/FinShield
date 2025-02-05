@@ -232,6 +232,8 @@ struct VideoCellView: View {
         .onDisappear { cleanupPlayer() }
         .sheet(isPresented: $showComments) {
             CommentsView(videoID: video.id)
+                .presentationDetents([.fraction(0.85)])
+                .presentationDragIndicator(.visible)
         }
     }
     
