@@ -22,20 +22,5 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.gray)
         }
-}
-
-
-    
-    // var body: some View {
-    //     NavigationView {
-    //         VStack {
-    //             Text("isSignedIn: \(authVM.isSignedIn.description)")
-    //             if authVM.isSignedIn {
-    //                 VideoFeedView()
-    //             } else {
-    //                 LoginView().environmentObject(authVM)
-    //             }
-    //         }
-    //     }
-    // }
+    }
 }

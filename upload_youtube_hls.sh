@@ -1,12 +1,9 @@
 #!/bin/bash
 # upload_youtube_hls.sh
 # Usage: ./upload_youtube_hls.sh <youtube_url> <video_name> <caption>
-# Example:
-#   ./upload_youtube_hls.sh "https://www.youtube.com/shorts/doIZnHlIVGA" "4000_in_10" "This is my caption"
 
 set -e
 
-# Check for exactly three arguments.
 if [ "$#" -ne 3 ]; then
     echo "Usage: $0 <youtube_url> <video_name> <caption>"
     exit 1
@@ -18,7 +15,6 @@ CAPTION="$3"
 
 # Define your Firebase Storage bucket.
 FIREBASE_BUCKET="gs://finshield-d895d.firebasestorage.app"
-# Files will be uploaded under: gs://finshield-d895d.firebasestorage.app/videos/<VIDEO_NAME>/
 DESTINATION="${FIREBASE_BUCKET}/videos/${VIDEO_NAME}/"
 
 echo "[$(date)] Starting process."
@@ -41,7 +37,6 @@ ffmpeg -i "$OUTPUT_VIDEO" -codec: copy -start_number 0 -hls_time 10 -hls_list_si
 echo "[$(date)] HLS conversion complete. Manifest at: $OUTPUT_DIR/$OUTPUT_PLAYLIST"
 
 # Step 2.5: Fix the manifest file so each TS reference is a full URL.
-# (This example uses a temporary Python script.)
 echo "[$(date)] Fixing manifest file to include full TS URLs..."
 TMP_PY_SCRIPT=$(mktemp /tmp/fix_manifest.XXXX.py)
 cat > "$TMP_PY_SCRIPT" <<'EOF'
@@ -50,17 +45,15 @@ if len(sys.argv) < 3:
     sys.exit("Usage: fix_manifest.py <video_name> <manifest_file>")
 video_name = sys.argv[1]
 manifest_file = sys.argv[2]
-# Define the base URL for Firebase Storage (adjust as needed)
 base_url = "https://firebasestorage.googleapis.com/v0/b/finshield-d895d.firebasestorage.app/o/"
-# The storage folder path (e.g., "videos/<video_name>/")
-folder = f"videos/{video_name}/"
-encoded_folder = urllib.parse.quote(folder)
+folder_path = f"videos/{video_name}/"
+encoded_folder = urllib.parse.quote(folder_path)
 with open(manifest_file, "r") as f:
     lines = f.readlines()
 new_lines = []
 for line in lines:
     stripped = line.strip()
-    if stripped.endswith(".ts"):
+    if stripped.endswith(".ts") or stripped.endswith(".m3u8"):
         full_url = f"{base_url}{encoded_folder}{stripped}?alt=media"
         new_lines.append(full_url + "\n")
     else:
@@ -78,7 +71,6 @@ gsutil -m cp -r "$OUTPUT_DIR"/* "$DESTINATION"
 echo "[$(date)] Upload complete."
 
 # Step 4: Construct the public URL for the manifest.
-# We URL-encode the storage path "videos/<VIDEO_NAME>/output.m3u8"
 ENCODED_PATH=$(python3 -c "import urllib.parse; print(urllib.parse.quote('videos/${VIDEO_NAME}/output.m3u8'))")
 PUBLIC_URL="https://firebasestorage.googleapis.com/v0/b/finshield-d895d.firebasestorage.app/o/${ENCODED_PATH}?alt=media"
 echo "[$(date)] Constructed public URL: $PUBLIC_URL"
@@ -105,8 +97,5 @@ curl -X POST "${FIRESTORE_URL}" \
   -H "Content-Type: application/json" \
   -d "${JSON_PAYLOAD}"
 echo "[$(date)] Document added to Firestore."
-
-# Optional: Cleanup local files.
-# rm -rf "$OUTPUT_VIDEO" "$OUTPUT_DIR"
 
 echo "[$(date)] Process finished successfully."
