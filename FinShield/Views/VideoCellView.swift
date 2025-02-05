@@ -2,29 +2,49 @@ import SwiftUI
 import AVKit
 import FirebaseFirestore
 
+/// A SwiftUI view representing a single video cell in the video feed.
+/// This view handles video playback, displays video metadata (username, title, caption, and timestamp),
+/// and provides interactive controls for sharing, liking, and commenting.
 struct VideoCellView: View {
+    /// The video model containing metadata and playback URL.
     let video: Video
+    /// Optionally, a preloaded AVPlayer for faster playback.
     let preloadedPlayer: AVPlayer?
     
-    @State private var player: AVPlayer?
-    @State private var playerError: Error?
-    @State private var isLoading = true
-    @State private var isLiked = false
-    @State private var likesCount = 0
-    @State private var commentsCount = 0
-    @State private var sharesCount = 0
-    @State private var showComments = false
+    // MARK: - State Properties
     
-    // Track only one listener per cell
+    /// The active AVPlayer instance.
+    @State private var player: AVPlayer?
+    /// Any error encountered during player setup.
+    @State private var playerError: Error?
+    /// Indicates whether the video is currently loading.
+    @State private var isLoading = true
+    /// Tracks the liked state for UI purposes.
+    @State private var isLiked = false
+    /// Number of likes (for display only).
+    @State private var likesCount = 0
+    /// Number of comments (updated in real time).
+    @State private var commentsCount = 0
+    /// Number of shares (for display only).
+    @State private var sharesCount = 0
+    /// Controls the presentation of the comments sheet.
+    @State private var showComments = false
+    /// Listener registration for comments updates.
     @State private var commentsListener: ListenerRegistration?
     
+    /// Firestore database reference.
     private let db = Firestore.firestore()
 
+    // MARK: - View Body
+    
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
+                // MARK: Video Playback or Placeholder
+                
                 Group {
                     if let player = player {
+                        // Display the video using the custom AVPlayer wrapper.
                         CustomVideoPlayer(player: player)
                             .onAppear {
                                 print("[\(Date())] Playing video \(video.id)")
@@ -35,17 +55,21 @@ struct VideoCellView: View {
                                 player.pause()
                             }
                     } else if isLoading {
+                        // Show a loading spinner while the video is being prepared.
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(Color.black)
                     } else {
+                        // Fallback to a black background if no video is available.
                         Color.black
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .ignoresSafeArea()
-
+                
+                // MARK: Error Overlay
+                
                 if let error = playerError {
                     VStack {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -60,34 +84,46 @@ struct VideoCellView: View {
                     .zIndex(2)
                 }
                 
-                // Basic overlay
+                // MARK: Metadata and Action Overlay
+                
                 VStack {
                     Spacer()
                     HStack(alignment: .bottom) {
+                        // Left side: Video metadata
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("@username")
+                            // Display the username with a leading '@'
+                            Text("@\(video.username)")
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.white)
+                            
+                            // Display the video title
+                            Text(video.videoTitle)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.white)
+                            
+                            // Display the video caption (limit to two lines)
                             Text(video.caption)
                                 .font(.system(size: 14))
                                 .foregroundColor(.white)
                                 .lineLimit(2)
-                            HStack {
-                                Image(systemName: "music.note")
-                                    .font(.system(size: 14))
-                                Text("Original Sound")
-                                    .font(.system(size: 14))
-                            }
-                            .foregroundColor(.white)
+                            
+                            // Display a relative timestamp (e.g., "5 minutes ago")
+                            Text(video.timestamp, style: .relative)
+                                .font(.system(size: 12))
+                                .foregroundColor(.white)
                         }
                         .padding(.leading)
                         .padding(.bottom, 20)
                         
                         Spacer()
                         
+                        // Right side: Interactive action buttons
                         VStack(spacing: 20) {
+                            // Share button
                             VStack(spacing: 4) {
-                                Button(action: {}) {
+                                Button(action: {
+                                    // Share action can be implemented here.
+                                }) {
                                     Image(systemName: "arrowshape.turn.up.right")
                                         .font(.system(size: 30))
                                         .foregroundColor(.white)
@@ -96,6 +132,7 @@ struct VideoCellView: View {
                                     .font(.caption)
                                     .foregroundColor(.white)
                             }
+                            // Like button
                             VStack(spacing: 4) {
                                 Button(action: { isLiked.toggle() }) {
                                     Image(systemName: isLiked ? "heart.fill" : "heart")
@@ -106,6 +143,7 @@ struct VideoCellView: View {
                                     .font(.caption)
                                     .foregroundColor(.white)
                             }
+                            // Comment button
                             VStack(spacing: 4) {
                                 Button(action: { showComments = true }) {
                                     Image(systemName: "bubble.right")
@@ -116,7 +154,10 @@ struct VideoCellView: View {
                                     .font(.caption)
                                     .foregroundColor(.white)
                             }
-                            Button(action: {}) {
+                            // Profile button (or additional options)
+                            Button(action: {
+                                // Implement profile or additional actions here.
+                            }) {
                                 Image(systemName: "person.circle.fill")
                                     .resizable()
                                     .frame(width: 44, height: 44)
@@ -128,6 +169,7 @@ struct VideoCellView: View {
                     }
                 }
                 .background(
+                    // Gradient overlay for improved readability of metadata.
                     LinearGradient(
                         gradient: Gradient(colors: [.clear, .black.opacity(0.3)]),
                         startPoint: .top,
@@ -139,23 +181,29 @@ struct VideoCellView: View {
         }
         .onAppear { setupPlayer() }
         .onDisappear { cleanupPlayer() }
+        // Present the comments view as a modal sheet.
         .sheet(isPresented: $showComments) {
             CommentsView(videoID: video.id)
         }
     }
     
+    // MARK: - Player Setup and Cleanup
+    
+    /// Sets up the AVPlayer for video playback.
+    /// - If a preloaded player is available, it uses that directly.
+    /// - Otherwise, it loads the video asset asynchronously.
     private func setupPlayer() {
         let startTime = Date()
         print("[\(startTime)] setupPlayer => video \(video.id)")
         
-        // Attach single comment listener
+        // Listen for comment changes in Firestore.
         commentsListener = db.collection("videos").document(video.id)
             .collection("comments")
             .addSnapshotListener { snapshot, _ in
                 commentsCount = snapshot?.documents.count ?? 0
             }
-
-        // If we have a preloaded player, skip loading
+        
+        // Use the preloaded player if provided.
         if let preloaded = preloadedPlayer {
             playerError = nil
             isLoading = false
@@ -183,12 +231,13 @@ struct VideoCellView: View {
                         if allLoaded {
                             let item = AVPlayerItem(asset: asset)
                             item.preferredForwardBufferDuration = 5.0
-                            // Removed forced peak bitrate to allow ABR:
-                            // item.preferredPeakBitRate = 500_000
+                            
+                            // Configure AVPlayer for continuous playback.
                             let newPlayer = AVPlayer(playerItem: item)
                             newPlayer.actionAtItemEnd = .none
                             newPlayer.automaticallyWaitsToMinimizeStalling = true
                             
+                            // Observe for playback errors.
                             NotificationCenter.default.addObserver(
                                 forName: .AVPlayerItemFailedToPlayToEndTime,
                                 object: item,
@@ -198,6 +247,7 @@ struct VideoCellView: View {
                                     self.playerError = err
                                 }
                             }
+                            // Loop the video when it reaches the end.
                             NotificationCenter.default.addObserver(
                                 forName: .AVPlayerItemDidPlayToEndTime,
                                 object: item,
@@ -220,6 +270,7 @@ struct VideoCellView: View {
         }
     }
     
+    /// Cleans up the player by stopping playback, removing observers, and detaching Firestore listeners.
     private func cleanupPlayer() {
         player?.pause()
         player?.replaceCurrentItem(with: nil)
@@ -231,9 +282,11 @@ struct VideoCellView: View {
     }
 }
 
-// Keep a simple custom video player
+/// A wrapper for AVPlayerViewController to integrate AVPlayer within SwiftUI.
 struct CustomVideoPlayer: UIViewControllerRepresentable {
+    /// The AVPlayer instance used for video playback.
     let player: AVPlayer
+    
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let controller = AVPlayerViewController()
         controller.player = player
@@ -241,6 +294,7 @@ struct CustomVideoPlayer: UIViewControllerRepresentable {
         controller.videoGravity = .resizeAspectFill
         return controller
     }
+    
     func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
         uiViewController.player = player
     }
