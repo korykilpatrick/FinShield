@@ -1,6 +1,5 @@
 import SwiftUI
 import AVKit
-import AVFoundation
 import FirebaseFirestore
 
 struct VideoCellView: View {
@@ -15,7 +14,10 @@ struct VideoCellView: View {
     @State private var commentsCount = 0
     @State private var sharesCount = 0
     @State private var showComments = false
+    
+    // Track only one listener per cell
     @State private var commentsListener: ListenerRegistration?
+    
     private let db = Firestore.firestore()
 
     var body: some View {
@@ -25,12 +27,11 @@ struct VideoCellView: View {
                     if let player = player {
                         CustomVideoPlayer(player: player)
                             .onAppear {
-                                print("[\(Date())] CustomVideoPlayer appeared for video \(video.id)")
+                                print("[\(Date())] Playing video \(video.id)")
                                 player.play()
-                                player.automaticallyWaitsToMinimizeStalling = true
                             }
                             .onDisappear {
-                                print("[\(Date())] CustomVideoPlayer disappeared for video \(video.id)")
+                                print("[\(Date())] Pausing video \(video.id)")
                                 player.pause()
                             }
                     } else if isLoading {
@@ -59,7 +60,7 @@ struct VideoCellView: View {
                     .zIndex(2)
                 }
                 
-                // Overlay UI (omitted for brevity)
+                // Basic overlay
                 VStack {
                     Spacer()
                     HStack(alignment: .bottom) {
@@ -144,84 +145,75 @@ struct VideoCellView: View {
     }
     
     private func setupPlayer() {
-        let setupStartTime = Date()
-        print("[\(setupStartTime)] setupPlayer() called for video \(video.id)")
+        let startTime = Date()
+        print("[\(startTime)] setupPlayer => video \(video.id)")
         
-        // Setup comments count listener
+        // Attach single comment listener
         commentsListener = db.collection("videos").document(video.id)
             .collection("comments")
-            .addSnapshotListener { snapshot, error in
-                guard let snapshot = snapshot else { return }
-                commentsCount = snapshot.documents.count
+            .addSnapshotListener { snapshot, _ in
+                commentsCount = snapshot?.documents.count ?? 0
             }
-        
-        if let preloadedPlayer = preloadedPlayer {
-            isLoading = false
+
+        // If we have a preloaded player, skip loading
+        if let preloaded = preloadedPlayer {
             playerError = nil
-            player = preloadedPlayer
-            let setupEndTime = Date()
-            let elapsed = setupEndTime.timeIntervalSince(setupStartTime)
-            print("[\(setupEndTime)] Used preloaded player; setup complete in \(elapsed)s for video \(video.id)")
+            isLoading = false
+            player = preloaded
+            let elapsed = Date().timeIntervalSince(startTime)
+            print("[\(Date())] Used preloaded player => setup in \(elapsed)s for \(video.id)")
         } else {
             isLoading = true
-            let asset = AVURLAsset(url: video.videoURL, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
-            let keys = ["playable", "preferredTransform"]
-            print("[\(Date())] Fallback: starting async load of asset keys for video \(video.id)")
-            
-            asset.loadValuesAsynchronously(forKeys: keys) {
-                DispatchQueue.main.async {
-                    var allLoaded = true
-                    for key in keys {
-                        var error: NSError?
-                        let status = asset.statusOfValue(forKey: key, error: &error)
-                        let keyLoadedTime = Date()
-                        let elapsed = keyLoadedTime.timeIntervalSince(setupStartTime)
-                        print("[\(keyLoadedTime)] Fallback: key '\(key)' status \(status) for video \(self.video.id), elapsed: \(elapsed)s")
-                        if status != .loaded {
-                            allLoaded = false
-                            print("[\(Date())] Fallback: failed to load key \(key) for video \(self.video.id) with error: \(error?.localizedDescription ?? "unknown error")")
-                            break
-                        }
-                    }
-                    if allLoaded {
-                        let playerItem = AVPlayerItem(asset: asset)
-                        playerItem.preferredForwardBufferDuration = 5.0
-                        // Set the preferredPeakBitRate to enable adaptive streaming.
-                        playerItem.preferredPeakBitRate = 500_000
-                        let newPlayer = AVPlayer(playerItem: playerItem)
-                        newPlayer.actionAtItemEnd = .none
-                        
-                        NotificationCenter.default.addObserver(
-                            forName: .AVPlayerItemFailedToPlayToEndTime,
-                            object: playerItem,
-                            queue: .main
-                        ) { notification in
-                            if let err = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error {
-                                self.playerError = err
+            DispatchQueue.global(qos: .background).async {
+                let asset = AVURLAsset(url: self.video.videoURL, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+                let keys = ["playable", "preferredTransform"]
+                
+                asset.loadValuesAsynchronously(forKeys: keys) {
+                    DispatchQueue.main.async {
+                        var allLoaded = true
+                        for key in keys {
+                            var error: NSError?
+                            let status = asset.statusOfValue(forKey: key, error: &error)
+                            if status != .loaded {
+                                allLoaded = false
+                                self.playerError = error
+                                break
                             }
                         }
-                        
-                        NotificationCenter.default.addObserver(
-                            forName: .AVPlayerItemDidPlayToEndTime,
-                            object: playerItem,
-                            queue: .main
-                        ) { _ in
-                            newPlayer.seek(to: .zero)
-                            newPlayer.play()
+                        if allLoaded {
+                            let item = AVPlayerItem(asset: asset)
+                            item.preferredForwardBufferDuration = 5.0
+                            // Removed forced peak bitrate to allow ABR:
+                            // item.preferredPeakBitRate = 500_000
+                            let newPlayer = AVPlayer(playerItem: item)
+                            newPlayer.actionAtItemEnd = .none
+                            newPlayer.automaticallyWaitsToMinimizeStalling = true
+                            
+                            NotificationCenter.default.addObserver(
+                                forName: .AVPlayerItemFailedToPlayToEndTime,
+                                object: item,
+                                queue: .main
+                            ) { notification in
+                                if let err = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error {
+                                    self.playerError = err
+                                }
+                            }
+                            NotificationCenter.default.addObserver(
+                                forName: .AVPlayerItemDidPlayToEndTime,
+                                object: item,
+                                queue: .main
+                            ) { _ in
+                                newPlayer.seek(to: .zero)
+                                newPlayer.play()
+                            }
+                            
+                            self.player = newPlayer
+                            self.isLoading = false
+                        } else {
+                            self.isLoading = false
                         }
-                        
-                        self.player = newPlayer
-                        self.isLoading = false
-                        let setupEndTime = Date()
-                        let elapsed = setupEndTime.timeIntervalSince(setupStartTime)
-                        print("[\(setupEndTime)] Fallback: setup complete for video \(self.video.id) in \(elapsed)s")
-                    } else {
-                        self.playerError = NSError(domain: "", code: -1, userInfo: [
-                            NSLocalizedDescriptionKey: "Failed to load necessary asset keys."
-                        ])
-                        self.isLoading = false
-                        let elapsed = Date().timeIntervalSince(setupStartTime)
-                        print("[\(Date())] Fallback: setup failed for video \(self.video.id) in \(elapsed)s")
+                        let elapsed = Date().timeIntervalSince(startTime)
+                        print("[\(Date())] Fallback load => \(allLoaded ? "success" : "fail") in \(elapsed)s for \(self.video.id)")
                     }
                 }
             }
@@ -232,17 +224,16 @@ struct VideoCellView: View {
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         NotificationCenter.default.removeObserver(self)
-        commentsListener?.remove()  // Remove comments listener
+        commentsListener?.remove()
         player = nil
         isLoading = false
-        print("[\(Date())] cleanupPlayer() called for video \(video.id)")
+        print("[\(Date())] cleanupPlayer => video \(video.id)")
     }
 }
 
-// Custom VideoPlayer to prevent overlay issues
+// Keep a simple custom video player
 struct CustomVideoPlayer: UIViewControllerRepresentable {
     let player: AVPlayer
-
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let controller = AVPlayerViewController()
         controller.player = player
@@ -250,7 +241,6 @@ struct CustomVideoPlayer: UIViewControllerRepresentable {
         controller.videoGravity = .resizeAspectFill
         return controller
     }
-
     func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
         uiViewController.player = player
     }

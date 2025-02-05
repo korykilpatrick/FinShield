@@ -61,7 +61,7 @@ ffmpeg -i "$OUTPUT_VIDEO" -filter_complex "\
 echo "[$(date)] Adaptive HLS conversion complete. Master manifest at: $OUTPUT_DIR/$MASTER_PLAYLIST"
 
 # Step 2.5: Fix the manifest files so that URLs point to the correct folders.
-# We'll run a Python script on the master manifest and on each variant playlist.
+# We use a Python script to fully URL-encode folder paths and file names.
 TMP_PY_SCRIPT=$(mktemp /tmp/fix_manifest.XXXX.py)
 cat > "$TMP_PY_SCRIPT" <<'EOF'
 import sys, urllib.parse, os
@@ -80,18 +80,18 @@ basename = os.path.basename(manifest_file)
 if basename == "master.m3u8":
     folder_path = f"videos/{video_name}/"
 else:
-    # For variant manifests, assume TS segments are in a subfolder matching the segment_prefix.
+    # For variant manifests, TS segments are in a subfolder matching the segment_prefix.
     folder_path = f"videos/{video_name}/{segment_prefix}"
-encoded_folder = urllib.parse.quote(folder_path)
+# Fully URL-encode folder path (encode slashes as well)
+encoded_folder = urllib.parse.quote(folder_path, safe="")
 with open(manifest_file, "r") as f:
     lines = f.readlines()
 new_lines = []
 for line in lines:
     stripped = line.strip()
-    # Only change lines that do not start with '#' and end with .ts or .m3u8.
+    # Change lines that do not start with '#' and end with .ts or .m3u8.
     if not stripped.startswith("#") and (stripped.endswith(".ts") or stripped.endswith(".m3u8")):
-        # URL-encode the stripped filename as well.
-        file_part = urllib.parse.quote(stripped)
+        file_part = urllib.parse.quote(stripped, safe="")
         full_url = f"{base_url}{encoded_folder}{file_part}?alt=media"
         new_lines.append(full_url + "\n")
     else:
@@ -122,7 +122,7 @@ gsutil -m cp -r "$OUTPUT_DIR"/* "$DESTINATION"
 echo "[$(date)] Upload complete."
 
 # Step 4: Construct the public URL for the master manifest.
-ENCODED_PATH=$(python3 -c 'import urllib.parse, sys; print(urllib.parse.quote("videos/'"${VIDEO_NAME}"'/master.m3u8"))')
+ENCODED_PATH=$(python3 -c 'import urllib.parse, sys; print(urllib.parse.quote("videos/'"${VIDEO_NAME}"'/master.m3u8", safe=""))')
 echo "[$(date)] Encoded path: $ENCODED_PATH"
 PUBLIC_URL="https://firebasestorage.googleapis.com/v0/b/finshield-d895d.firebasestorage.app/o/${ENCODED_PATH}?alt=media"
 echo "[$(date)] Constructed public URL: $PUBLIC_URL"
@@ -151,3 +151,6 @@ curl -X POST "${FIRESTORE_URL}" \
 echo "[$(date)] Document added to Firestore."
 
 echo "[$(date)] Process finished successfully."
+
+rm -rf hls_output/
+rm video.mp4

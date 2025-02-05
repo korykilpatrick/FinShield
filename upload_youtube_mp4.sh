@@ -26,10 +26,15 @@ echo "[$(date)] Video name: $VIDEO_NAME"
 echo "[$(date)] Caption: $CAPTION"
 
 # Step 1: Download the video as an MP4 named after the video name.
-OUTPUT_VIDEO="${VIDEO_NAME}.mp4"
+# OUTPUT_VIDEO="${VIDEO_NAME}.mp4"
+OUTPUT_VIDEO="videos/${VIDEO_NAME}.mp4"
 echo "[$(date)] Downloading video from: $YOUTUBE_URL"
 yt-dlp -f 'bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]' "$YOUTUBE_URL" -o "$OUTPUT_VIDEO"
 echo "[$(date)] Video downloaded to: $OUTPUT_VIDEO"
+
+# break early right here, temporarily
+exit 0
+
 
 # Generate a download token.
 TOKEN=$(uuidgen)

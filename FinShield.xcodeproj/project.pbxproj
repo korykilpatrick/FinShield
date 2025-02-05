@@ -29,6 +29,11 @@
 			path = FinShield;
 			sourceTree = "<group>";
 		};
+		976EDC732D53CC6E00589069 /* videos */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = videos;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -51,6 +56,7 @@
 		976EDC0D2D51714800589069 = {
 			isa = PBXGroup;
 			children = (
+				976EDC732D53CC6E00589069 /* videos */,
 				976EDC712D52B2F600589069 /* upload_youtube_hls.sh */,
 				976EDC6F2D51AD3200589069 /* GoogleService-Info.plist */,
 				976EDC182D51714800589069 /* FinShield */,
@@ -83,6 +89,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				976EDC182D51714800589069 /* FinShield */,
+				976EDC732D53CC6E00589069 /* videos */,
 			);
 			name = FinShield;
 			packageProductDependencies = (

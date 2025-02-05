@@ -1,8 +1,6 @@
 import SwiftUI
 import FirebaseAuth
 
-// This is the main view that will be displayed when the app is opened. Lets start with a hello world.
-
 struct ContentView: View {
     @StateObject var authVM = AuthenticationViewModel()
     

@@ -3,16 +3,20 @@ import SwiftUI
 struct VideoFeedView: View {
     @StateObject var viewModel = VideoFeedViewModel()
     @State private var currentIndex = 0
-
+    
+    // Reduced multiplier to limit total TabView pages
+    private let multiplier = 50
+    
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
+            
             if viewModel.videos.isEmpty {
                 Text("No videos available")
                     .foregroundColor(.white)
             } else {
-                let multiplier = 1000
                 let totalCount = viewModel.videos.count * multiplier
+                
                 TabView(selection: $currentIndex) {
                     ForEach(0..<totalCount, id: \.self) { index in
                         let modIndex = index % viewModel.videos.count
@@ -26,19 +30,24 @@ struct VideoFeedView: View {
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
                 .ignoresSafeArea()
                 .onAppear {
+                    // Center the feed
                     currentIndex = totalCount / 2
-                    print("[\(Date())] VideoFeedView onAppear: currentIndex set to \(currentIndex)")
+                    print("[\(Date())] onAppear => currentIndex = \(currentIndex)")
                 }
                 .onChange(of: currentIndex) { newIndex in
                     let mod = newIndex % viewModel.videos.count
-                    print("[\(Date())] currentIndex changed to \(newIndex) (mod index \(mod))")
-                    // Preload five videos: current, two before, and two after.
-                    viewModel.preloadVideo(at: mod - 2)
-                    viewModel.preloadVideo(at: mod - 1)
-                    viewModel.preloadVideo(at: mod)
-                    viewModel.preloadVideo(at: mod + 1)
-                    viewModel.preloadVideo(at: mod + 2)
+                    print("[\(Date())] currentIndex changed => \(newIndex) [mod: \(mod)]")
+                    
+                    // Preload current, +/-2
+                    (mod-2...mod+2).forEach { viewModel.preloadVideo(at: $0) }
                 }
+            }
+        }
+        .onChange(of: viewModel.videos) { newVideos in
+            // Whenever videos reload, reset currentIndex to the middle
+            if !newVideos.isEmpty {
+                let totalCount = newVideos.count * multiplier
+                currentIndex = totalCount / 2
             }
         }
     }
