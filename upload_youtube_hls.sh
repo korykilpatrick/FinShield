@@ -1,35 +1,6 @@
 #!/bin/bash
 # upload_youtube_hls.sh
 # Usage: ./upload_youtube_hls.sh <youtube_url> <video_name>
-#
-# This script is platform agnostic – it works on Linux, macOS, or Windows (using a Unix-like shell)
-# as long as the required tools are installed.
-#
-# Requirements:
-#   - Bash shell (v4+ recommended)
-#   - yt-dlp (https://github.com/yt-dlp/yt-dlp)
-#   - jq (for JSON parsing)
-#   - ffmpeg (for converting video to adaptive HLS)
-#   - Python3 (for fixing manifest URLs)
-#   - gsutil (for uploading files to Firebase Storage)
-#   - curl (for sending REST API requests)
-#   - gcloud CLI (for obtaining an access token for Firestore)
-#
-# Setup:
-#   1. Install all the required tools listed above.
-#   2. Authenticate with gcloud (run: gcloud auth login).
-#   3. Set your Firebase project ID in the PROJECT_ID variable below.
-#
-# What the script does:
-#   1. Extracts metadata (title, caption, username, timestamp) from the YouTube URL.
-#   2. Downloads the video as an MP4.
-#   3. Converts it to an adaptive HLS package with multiple renditions.
-#   4. Fixes manifest URLs.
-#   5. Uploads the HLS package to Firebase Storage.
-#   6. Creates a Firestore document with the video metadata and public URL.
-#
-# For more details, see the repository documentation.
-
 set -e
 
 if [ "$#" -ne 2 ]; then
@@ -37,34 +8,33 @@ if [ "$#" -ne 2 ]; then
     exit 1
 fi
 
-PROJECT_ID="finshield-d895d" # Project Overview -> Project Settings -> General -> Project ID
+PROJECT_ID="finshield-d895d" # Set your Firebase project ID here
 FIREBASE_BUCKET="gs://${PROJECT_ID}.firebasestorage.app"
 
-# Assign command-line arguments.
+# Command-line arguments.
 YOUTUBE_URL="$1"
-VIDEO_NAME="$2" # Name of the video as it will be stored in Firebase Storage, NOT the title of the YouTube video.
+VIDEO_NAME="$2" # Internal video name for storage
 
 echo "[$(date)] Starting process."
 echo "[$(date)] YouTube URL: $YOUTUBE_URL"
 echo "[$(date)] Video name (internal): $VIDEO_NAME"
 
-# Step 0: Extract metadata from YouTube and dump JSON to a temporary file.
+# Step 0: Extract metadata from YouTube.
 echo "[$(date)] Extracting metadata from YouTube..."
 TMP_METADATA=$(mktemp /tmp/metadata.XXXX.json)
 yt-dlp --no-warnings --skip-download --dump-json "$YOUTUBE_URL" > "$TMP_METADATA"
 echo "[$(date)] Metadata dumped to $TMP_METADATA"
 
-# Parse metadata using jq (ensure jq is installed).
 VIDEO_TITLE=$(jq -r '.title' "$TMP_METADATA")
 VIDEO_CAPTION=$(jq -r '.description' "$TMP_METADATA")
 VIDEO_USERNAME=$(jq -r '.uploader' "$TMP_METADATA")
+PROFILE_PICTURE=$(jq -r '.uploader_thumbnail // empty' "$TMP_METADATA")
 
-# Extract the timestamp from the metadata if available.
+# Extract timestamp (fallback to current date/time if missing)
 YT_TIMESTAMP=$(jq -r '.timestamp' "$TMP_METADATA")
 if [ "$YT_TIMESTAMP" == "null" ] || [ -z "$YT_TIMESTAMP" ]; then
     VIDEO_TIMESTAMP=$(date +"%Y-%m-%dT%H:%M:%SZ")
 else
-    # Use BSD-compatible flag on macOS; otherwise assume GNU date.
     if [ "$(uname)" == "Darwin" ]; then
         VIDEO_TIMESTAMP=$(date -u -r "$YT_TIMESTAMP" +"%Y-%m-%dT%H:%M:%SZ")
     else
@@ -83,10 +53,10 @@ echo "[$(date)] Downloading video from: $YOUTUBE_URL"
 yt-dlp -f bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4 "$YOUTUBE_URL" -o "$OUTPUT_VIDEO"
 echo "[$(date)] Video downloaded to: $OUTPUT_VIDEO"
 
-# Step 2: Convert the MP4 to an adaptive HLS package with five renditions.
+# Step 2: Convert MP4 to adaptive HLS with multiple renditions.
 OUTPUT_DIR="hls_output"
 MASTER_PLAYLIST="master.m3u8"
-echo "[$(date)] Converting $OUTPUT_VIDEO to adaptive HLS format with multiple renditions..."
+echo "[$(date)] Converting $OUTPUT_VIDEO to adaptive HLS..."
 mkdir -p "$OUTPUT_DIR"
 ffmpeg -i "$OUTPUT_VIDEO" -filter_complex "\
   [0:v]split=5[v1080][v720][v480][v240][v144]; \
@@ -115,8 +85,7 @@ ffmpeg -i "$OUTPUT_VIDEO" -filter_complex "\
   "$OUTPUT_DIR/stream_%v.m3u8"
 echo "[$(date)] Adaptive HLS conversion complete. Master manifest at: $OUTPUT_DIR/$MASTER_PLAYLIST"
 
-# Step 2.5: Fix manifest files so URLs point to the correct folders.
-# A Python script is used to URL-encode folder paths and file names.
+# Step 2.5: Fix manifest URLs via a Python helper script.
 TMP_PY_SCRIPT=$(mktemp /tmp/fix_manifest.XXXX.py)
 cat > "$TMP_PY_SCRIPT" <<'EOF'
 import sys, urllib.parse, os
@@ -151,13 +120,11 @@ EOF
 
 echo "[$(date)] Fixing master manifest..."
 python3 "$TMP_PY_SCRIPT" "$VIDEO_NAME" "$OUTPUT_DIR/$MASTER_PLAYLIST"
-
 for v in {0..4}; do
     VARIANT_MANIFEST="$OUTPUT_DIR/stream_${v}.m3u8"
     echo "[$(date)] Fixing variant manifest $VARIANT_MANIFEST..."
     python3 "$TMP_PY_SCRIPT" "$VIDEO_NAME" "$VARIANT_MANIFEST" "stream_${v}"
 done
-
 rm "$TMP_PY_SCRIPT"
 echo "[$(date)] Manifest files updated."
 
@@ -167,13 +134,17 @@ echo "[$(date)] Uploading files from $OUTPUT_DIR to $DESTINATION ..."
 gsutil -m cp -r "$OUTPUT_DIR"/* "$DESTINATION"
 echo "[$(date)] Upload complete."
 
-# Step 4: Construct the public URL for the master manifest.
+# Step 4: Construct public URL for the master manifest.
 ENCODED_PATH=$(python3 -c 'import urllib.parse, sys; print(urllib.parse.quote("videos/'"${VIDEO_NAME}"'/master.m3u8", safe=""))')
 PUBLIC_URL="https://firebasestorage.googleapis.com/v0/b/finshield-d895d.firebasestorage.app/o/${ENCODED_PATH}?alt=media"
 echo "[$(date)] Constructed public URL: $PUBLIC_URL"
 
-# Step 5: Add a document to Firestore via the REST API.
-# The JSON payload now includes the extracted title, caption, username, and timestamp.
+# Step 5: Generate random engagement metrics.
+LIKES=$(( RANDOM % 100000 + 100 ))
+BOOKMARKS=$(( RANDOM % 10000 + 10 ))
+SHARES=$(( RANDOM % 1000 + 1 ))
+
+# Create Firestore document with additional engagement fields.
 FIRESTORE_URL="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/videos"
 ACCESS_TOKEN=$(gcloud auth print-access-token)
 JSON_PAYLOAD=$(cat <<EOF
@@ -184,7 +155,11 @@ JSON_PAYLOAD=$(cat <<EOF
     "videoURL": { "stringValue": "${PUBLIC_URL}" },
     "caption": { "stringValue": "${VIDEO_CAPTION}" },
     "username": { "stringValue": "${VIDEO_USERNAME}" },
-    "timestamp": { "timestampValue": "${VIDEO_TIMESTAMP}" }
+    "timestamp": { "timestampValue": "${VIDEO_TIMESTAMP}" },
+    "profilePicture": { "stringValue": "${PROFILE_PICTURE}" },
+    "numLikes": { "integerValue": "${LIKES}" },
+    "numBookmarks": { "integerValue": "${BOOKMARKS}" },
+    "numShares": { "integerValue": "${SHARES}" }
   }
 }
 EOF
@@ -198,7 +173,7 @@ echo "[$(date)] Document added to Firestore."
 
 echo "[$(date)] Process finished successfully."
 
-# Cleanup: remove the HLS output directory, downloaded video, and temporary metadata file.
+# Cleanup temporary files.
 rm -rf hls_output/
 rm "$OUTPUT_VIDEO"
 rm "$TMP_METADATA"
