@@ -60,47 +60,69 @@ ffmpeg -i "$OUTPUT_VIDEO" -filter_complex "\
   "$OUTPUT_DIR/stream_%v.m3u8"
 echo "[$(date)] Adaptive HLS conversion complete. Master manifest at: $OUTPUT_DIR/$MASTER_PLAYLIST"
 
-# Step 2.5: Fix the manifest file so each TS (or variant playlist) line includes the full URL.
-echo "[$(date)] Fixing manifest file to include full TS URLs..."
+# Step 2.5: Fix the manifest files so that URLs point to the correct folders.
+# We'll run a Python script on the master manifest and on each variant playlist.
 TMP_PY_SCRIPT=$(mktemp /tmp/fix_manifest.XXXX.py)
 cat > "$TMP_PY_SCRIPT" <<'EOF'
-import sys, urllib.parse
+import sys, urllib.parse, os
 if len(sys.argv) < 3:
-    sys.exit("Usage: fix_manifest.py <video_name> <manifest_file>")
+    sys.exit("Usage: fix_manifest.py <video_name> <manifest_file> [segment_prefix]")
 video_name = sys.argv[1]
 manifest_file = sys.argv[2]
+# Optional segment_prefix for variant manifests (e.g. "stream_0/")
+segment_prefix = sys.argv[3] if len(sys.argv) >= 4 else ""
+if segment_prefix and not segment_prefix.endswith("/"):
+    segment_prefix += "/"
 # Base URL for Firebase Storage objects
 base_url = "https://firebasestorage.googleapis.com/v0/b/finshield-d895d.firebasestorage.app/o/"
-# Folder path where the video files are uploaded (needs URL encoding)
-folder_path = f"videos/{video_name}/"
+# Determine folder path based on manifest name.
+basename = os.path.basename(manifest_file)
+if basename == "master.m3u8":
+    folder_path = f"videos/{video_name}/"
+else:
+    # For variant manifests, assume TS segments are in a subfolder matching the segment_prefix.
+    folder_path = f"videos/{video_name}/{segment_prefix}"
 encoded_folder = urllib.parse.quote(folder_path)
 with open(manifest_file, "r") as f:
     lines = f.readlines()
 new_lines = []
 for line in lines:
     stripped = line.strip()
-    if stripped.endswith(".ts") or stripped.endswith(".m3u8"):
-        full_url = f"{base_url}{encoded_folder}{stripped}?alt=media"
+    # Only change lines that do not start with '#' and end with .ts or .m3u8.
+    if not stripped.startswith("#") and (stripped.endswith(".ts") or stripped.endswith(".m3u8")):
+        # URL-encode the stripped filename as well.
+        file_part = urllib.parse.quote(stripped)
+        full_url = f"{base_url}{encoded_folder}{file_part}?alt=media"
         new_lines.append(full_url + "\n")
     else:
         new_lines.append(line)
 with open(manifest_file, "w") as f:
     f.writelines(new_lines)
 EOF
-python3 "$TMP_PY_SCRIPT" "$VIDEO_NAME" "$OUTPUT_DIR/$MASTER_PLAYLIST"
-rm "$TMP_PY_SCRIPT"
-echo "[$(date)] Manifest file updated."
-echo "----- Manifest file content -----"
-cat "$OUTPUT_DIR/$MASTER_PLAYLIST"
-echo "-----------------------------------"
 
-# Step 3: Upload the HLS package (manifest and TS segments) to Firebase Storage.
+echo "[$(date)] Fixing master manifest..."
+python3 "$TMP_PY_SCRIPT" "$VIDEO_NAME" "$OUTPUT_DIR/$MASTER_PLAYLIST"
+
+for v in {0..4}; do
+    VARIANT_MANIFEST="$OUTPUT_DIR/stream_${v}.m3u8"
+    echo "[$(date)] Fixing variant manifest $VARIANT_MANIFEST..."
+    python3 "$TMP_PY_SCRIPT" "$VIDEO_NAME" "$VARIANT_MANIFEST" "stream_${v}"
+done
+
+rm "$TMP_PY_SCRIPT"
+
+echo "[$(date)] Manifest files updated."
+echo "----- Master Manifest -----"
+cat "$OUTPUT_DIR/$MASTER_PLAYLIST"
+echo "---------------------------"
+
+# Step 3: Upload the HLS package (master manifest, variant manifests, and TS segments) to Firebase Storage.
 echo "[$(date)] Uploading files from $OUTPUT_DIR to $DESTINATION ..."
 gsutil -m cp -r "$OUTPUT_DIR"/* "$DESTINATION"
 echo "[$(date)] Upload complete."
 
 # Step 4: Construct the public URL for the master manifest.
-ENCODED_PATH=$(python3 -c 'import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))' "videos/${VIDEO_NAME}/${MASTER_PLAYLIST}")
+ENCODED_PATH=$(python3 -c 'import urllib.parse, sys; print(urllib.parse.quote("videos/'"${VIDEO_NAME}"'/master.m3u8"))')
 echo "[$(date)] Encoded path: $ENCODED_PATH"
 PUBLIC_URL="https://firebasestorage.googleapis.com/v0/b/finshield-d895d.firebasestorage.app/o/${ENCODED_PATH}?alt=media"
 echo "[$(date)] Constructed public URL: $PUBLIC_URL"
