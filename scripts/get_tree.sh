@@ -5,6 +5,6 @@
 cd "$(dirname "$0")/.."
 
 # Run tree while ignoring common config files and docs; output to project_tree.txt
-tree -I "firebase.json|firestore.indexes.json|firestore.rules|storage.rules|GoogleService-Info.plist|docs|config" > project_tree.txt
+tree -I "firebase.json|firestore.indexes.json|firestore.rules|storage.rules|GoogleService-Info.plist|docs|config|FinShield.xcodeproj" > project_tree.txt
 
 echo "Project tree generated in project_tree.txt"

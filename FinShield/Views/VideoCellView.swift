@@ -6,6 +6,8 @@ import Foundation
 struct VideoCellView: View {
     let video: Video
     let preloadedPlayer: AVPlayer?
+    let index: Int
+    @Binding var activePage: Int
     
     @State private var player: AVPlayer?
     @State private var playerError: Error?
@@ -23,10 +25,13 @@ struct VideoCellView: View {
     @State private var isCaptionExpanded = false
     @State private var isCaptionFullyExpanded = false
     
-    // Initialize counts from the video object.
-    init(video: Video, preloadedPlayer: AVPlayer?) {
+    private let db = Firestore.firestore()
+    
+    init(video: Video, preloadedPlayer: AVPlayer?, index: Int, activePage: Binding<Int>) {
         self.video = video
         self.preloadedPlayer = preloadedPlayer
+        self.index = index
+        self._activePage = activePage
         _likesCount = State(initialValue: video.numLikes)
         _bookmarksCount = State(initialValue: video.numBookmarks)
         _sharesCount = State(initialValue: video.numShares)
@@ -42,36 +47,59 @@ struct VideoCellView: View {
         }
     }
     
-    private let db = Firestore.firestore()
-    
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
-                // Video Playback or Placeholder
-                Group {
-                    if let player = player {
-                        CustomVideoPlayer(player: player)
-                            .onAppear {
-                                print("[\(Date())] Playing video \(video.id)")
-                                player.play()
-                            }
-                            .onDisappear {
-                                print("[\(Date())] Pausing video \(video.id)")
-                                player.pause()
-                            }
-                    } else if isLoading {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(Color.black)
-                    } else {
-                        Color.black
+                ZStack {
+                    Group {
+                        if let player = player {
+                            CustomVideoPlayer(player: player)
+                                .onAppear {
+                                    print("[VideoCellView] onAppear: Starting video \(video.id)")
+                                    // Only auto-play if this is the active page.
+                                    if activePage == index { player.play() }
+                                }
+                                .onDisappear {
+                                    print("[VideoCellView] onDisappear: Pausing video \(video.id)")
+                                    player.pause()
+                                }
+                        } else if isLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .background(Color.black)
+                        } else {
+                            Color.black
+                        }
                     }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .ignoresSafeArea()
+                    .zIndex(0)
+                    
+                    // Overlay tap-to-toggle using a simultaneous gesture.
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 0)
+                                .onEnded { value in
+                                    if abs(value.translation.width) < 10 && abs(value.translation.height) < 10 {
+                                        if let player = player {
+                                            if player.rate == 0 {
+                                                player.play()
+                                                print("[VideoCellView] Player toggled to play.")
+                                            } else {
+                                                player.pause()
+                                                print("[VideoCellView] Player toggled to pause.")
+                                            }
+                                        } else {
+                                            print("[VideoCellView] No player available on tap.")
+                                        }
+                                    }
+                                }
+                        )
+                        .zIndex(999)
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .ignoresSafeArea()
                 
-                // Error Overlay
                 if let error = playerError {
                     VStack {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -84,13 +112,14 @@ struct VideoCellView: View {
                     .background(Color.black.opacity(0.7))
                     .cornerRadius(12)
                     .zIndex(2)
+                    .onAppear {
+                        print("[VideoCellView] Error for video \(video.id): \(error.localizedDescription)")
+                    }
                 }
                 
-                // Metadata and Sidebar Overlay
                 VStack {
                     Spacer()
                     HStack(alignment: .bottom) {
-                        // Left: Video metadata
                         VStack(alignment: .leading, spacing: 8) {
                             Text(video.username)
                                 .font(.system(size: 16, weight: .bold))
@@ -107,6 +136,7 @@ struct VideoCellView: View {
                                     .onTapGesture {
                                         if !isCaptionExpanded {
                                             withAnimation { isCaptionExpanded = true }
+                                            print("[VideoCellView] Expanding caption for video \(video.id)")
                                         }
                                     }
                                 
@@ -118,6 +148,7 @@ struct VideoCellView: View {
                                                     isCaptionExpanded = false
                                                     isCaptionFullyExpanded = false
                                                 }
+                                                print("[VideoCellView] Collapsing caption for video \(video.id)")
                                             }
                                             .font(.caption)
                                             .foregroundColor(.blue)
@@ -125,6 +156,7 @@ struct VideoCellView: View {
                                             HStack {
                                                 Button("Show More") {
                                                     withAnimation { isCaptionFullyExpanded = true }
+                                                    print("[VideoCellView] Fully expanding caption for video \(video.id)")
                                                 }
                                                 .font(.caption)
                                                 .foregroundColor(.blue)
@@ -134,6 +166,7 @@ struct VideoCellView: View {
                                                         isCaptionExpanded = false
                                                         isCaptionFullyExpanded = false
                                                     }
+                                                    print("[VideoCellView] Collapsing caption for video \(video.id)")
                                                 }
                                                 .font(.caption)
                                                 .foregroundColor(.blue)
@@ -145,6 +178,7 @@ struct VideoCellView: View {
                                                 isCaptionExpanded = false
                                                 isCaptionFullyExpanded = false
                                             }
+                                            print("[VideoCellView] Collapsing caption for video \(video.id)")
                                         }
                                         .font(.caption)
                                         .foregroundColor(.blue)
@@ -161,7 +195,6 @@ struct VideoCellView: View {
                         
                         Spacer()
                         
-                        // Right: Sidebar (heart, comments, bookmark, share)
                         VideoSidebarView(
                             numLikes: likesCount,
                             numComments: commentsCount,
@@ -172,13 +205,16 @@ struct VideoCellView: View {
                             onLike: {
                                 isLiked.toggle()
                                 likesCount += isLiked ? 1 : -1
+                                print("[VideoCellView] Like toggled => isLiked=\(isLiked), total=\(likesCount)")
                             },
                             onBookmark: {
                                 isBookmarked.toggle()
                                 bookmarksCount += isBookmarked ? 1 : -1
+                                print("[VideoCellView] Bookmark toggled => isBookmarked=\(isBookmarked), total=\(bookmarksCount)")
                             },
                             onComment: {
                                 showComments = true
+                                print("[VideoCellView] Comment tapped => showing comments for video \(video.id)")
                             }
                         )
                         .padding(.trailing)
@@ -192,11 +228,30 @@ struct VideoCellView: View {
                         endPoint: .bottom
                     )
                 )
-                .zIndex(1)
+                .zIndex(3)
             }
         }
-        .onAppear { setupPlayer() }
-        .onDisappear { cleanupPlayer() }
+        .onAppear {
+            print("[VideoCellView] onAppear => setupPlayer() for video \(video.id)")
+            setupPlayer()
+        }
+        .onDisappear {
+            print("[VideoCellView] onDisappear => cleanupPlayer() for video \(video.id)")
+            cleanupPlayer()
+        }
+        // When the active page changes, pause this video if it’s not current,
+        // or play it if it just became active.
+        .onChange(of: activePage) { newValue in
+            if newValue != index {
+                player?.pause()
+                print("[VideoCellView] Pausing video \(video.id) because activePage changed to \(newValue)")
+            } else {
+                if let player = player, player.rate == 0 {
+                    player.play()
+                    print("[VideoCellView] Playing video \(video.id) because activePage is now \(newValue)")
+                }
+            }
+        }
         .sheet(isPresented: $showComments) {
             CommentsView(videoID: video.id)
                 .presentationDetents([.fraction(0.85)])
@@ -206,12 +261,13 @@ struct VideoCellView: View {
     
     private func setupPlayer() {
         let startTime = Date()
-        print("[\(startTime)] setupPlayer => video \(video.id)")
+        print("[VideoCellView] setupPlayer called at \(startTime) for video \(video.id)")
         
         commentsListener = db.collection("videos").document(video.id)
             .collection("comments")
             .addSnapshotListener { snapshot, _ in
                 commentsCount = snapshot?.documents.count ?? 0
+                print("[VideoCellView] Comments updated => \(commentsCount) for video \(video.id)")
             }
         
         if let preloaded = preloadedPlayer {
@@ -219,11 +275,12 @@ struct VideoCellView: View {
             isLoading = false
             player = preloaded
             let elapsed = Date().timeIntervalSince(startTime)
-            print("[\(Date())] Used preloaded player => setup in \(elapsed)s for \(video.id)")
+            print("[VideoCellView] Using preloaded player => video \(video.id), \(elapsed)s")
         } else {
             isLoading = true
             DispatchQueue.global(qos: .background).async {
-                let asset = AVURLAsset(url: self.video.videoURL, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+                let asset = AVURLAsset(url: self.video.videoURL,
+                                       options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
                 let keys = ["playable", "preferredTransform"]
                 
                 asset.loadValuesAsynchronously(forKeys: keys) {
@@ -232,6 +289,7 @@ struct VideoCellView: View {
                         for key in keys {
                             var error: NSError?
                             let status = asset.statusOfValue(forKey: key, error: &error)
+                            print("[VideoCellView] Key '\(key)' loaded => status=\(status.rawValue)")
                             if status != .loaded {
                                 allLoaded = false
                                 self.playerError = error
@@ -253,6 +311,7 @@ struct VideoCellView: View {
                             ) { notification in
                                 if let err = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error {
                                     self.playerError = err
+                                    print("[VideoCellView] AVPlayerItemFailedToPlayToEndTime => \(err)")
                                 }
                             }
                             NotificationCenter.default.addObserver(
@@ -262,15 +321,18 @@ struct VideoCellView: View {
                             ) { _ in
                                 newPlayer.seek(to: .zero)
                                 newPlayer.play()
+                                print("[VideoCellView] Video ended => restarting \(self.video.id).")
                             }
                             
                             self.player = newPlayer
                             self.isLoading = false
+                            print("[VideoCellView] Asset loaded => fallback success for video \(self.video.id)")
                         } else {
                             self.isLoading = false
+                            print("[VideoCellView] Fallback load failed => video \(self.video.id)")
                         }
                         let elapsed = Date().timeIntervalSince(startTime)
-                        print("[\(Date())] Fallback load => \(allLoaded ? "success" : "fail") in \(elapsed)s for \(self.video.id)")
+                        print("[VideoCellView] setupPlayer done => \(elapsed)s for video \(self.video.id)")
                     }
                 }
             }
@@ -278,28 +340,12 @@ struct VideoCellView: View {
     }
     
     private func cleanupPlayer() {
+        print("[VideoCellView] cleanupPlayer => \(video.id)")
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         NotificationCenter.default.removeObserver(self)
         commentsListener?.remove()
         player = nil
         isLoading = false
-        print("[\(Date())] cleanupPlayer => video \(video.id)")
-    }
-}
-
-struct CustomVideoPlayer: UIViewControllerRepresentable {
-    let player: AVPlayer
-    
-    func makeUIViewController(context: Context) -> AVPlayerViewController {
-        let controller = AVPlayerViewController()
-        controller.player = player
-        controller.showsPlaybackControls = false
-        controller.videoGravity = .resizeAspectFill
-        return controller
-    }
-    
-    func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
-        uiViewController.player = player
     }
 }
