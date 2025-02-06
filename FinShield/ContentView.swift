@@ -4,21 +4,20 @@ import FirebaseAuth
 struct ContentView: View {
     @StateObject var authVM = AuthenticationViewModel()
     
-    init() {
-        print("ContentView initialized")
-    }
-
     var body: some View {
         NavigationView {
-            VStack {
-                if authVM.isSignedIn {
+            if authVM.isSignedIn {
+                ZStack {
                     VideoFeedView()
-                } else {
-                    LoginView().environmentObject(authVM)
+                    VStack {
+                        Spacer()
+                        BottomNavBarView()
+                    }
+                    .edgesIgnoringSafeArea(.bottom)
                 }
+            } else {
+                LoginView().environmentObject(authVM)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.gray)
         }
     }
 }
