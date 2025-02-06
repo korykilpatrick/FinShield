@@ -10,24 +10,32 @@ class VideoFeedViewModel: ObservableObject {
     private var preloadedPlayers: [Int: AVPlayer] = [:]
     
     init() {
+        print("[VideoFeedViewModel] init => fetching videos.")
         fetchVideos()
     }
     
     func fetchVideos() {
-        // Listen for all video docs
         db.collection("videos").addSnapshotListener { [weak self] snapshot, error in
             guard let self = self else { return }
+            
             if let error = error {
-                print("[\(Date())] Error fetching videos: \(error.localizedDescription)")
+                print("[VideoFeedViewModel] Error fetching videos: \(error.localizedDescription)")
                 return
             }
-            guard let docs = snapshot?.documents else { return }
-            let fetched = docs.compactMap { Video(from: $0.data(), id: $0.documentID) }
-            // Filter to only include HLS videos by ensuring the URL contains "master.m3u8"
-            self.videos = fetched.filter { $0.videoURL.absoluteString.contains("master.m3u8") }.shuffled()
-            print("[\(Date())] Fetched \(self.videos.count) HLS videos")
+            guard let docs = snapshot?.documents else {
+                print("[VideoFeedViewModel] No documents found.")
+                return
+            }
             
-            // Clear preloads each time the list changes
+            let fetched = docs.compactMap {
+                Video(from: $0.data(), id: $0.documentID)
+            }
+            self.videos = fetched.filter {
+                $0.videoURL.absoluteString.contains("master.m3u8")
+            }.shuffled()
+            
+            print("[VideoFeedViewModel] Fetched \(self.videos.count) HLS videos.")
+            
             self.preloadedItems.removeAll()
             self.preloadedPlayers.removeAll()
         }
@@ -36,13 +44,13 @@ class VideoFeedViewModel: ObservableObject {
     func preloadVideo(at index: Int) {
         guard index >= 0, index < videos.count else { return }
         if preloadedItems[index] != nil { return }
-
+        
         let videoURL = videos[index].videoURL
         let asset = AVURLAsset(url: videoURL, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
         let keys = ["playable", "duration", "preferredTransform"]
         let startTime = Date()
         
-        print("[\(startTime)] Preload => index \(index)")
+        print("[VideoFeedViewModel] Preloading index \(index), URL: \(videoURL).")
         
         DispatchQueue.global(qos: .background).async {
             asset.loadValuesAsynchronously(forKeys: keys) {
@@ -50,27 +58,29 @@ class VideoFeedViewModel: ObservableObject {
                 for key in keys {
                     var error: NSError?
                     let status = asset.statusOfValue(forKey: key, error: &error)
-                    if status != .loaded { allLoaded = false; break }
+                    if status != .loaded {
+                        allLoaded = false
+                        print("[VideoFeedViewModel] Preload => Key \(key) not loaded.")
+                        break
+                    }
                 }
                 DispatchQueue.main.async {
                     if allLoaded {
                         let item = AVPlayerItem(asset: asset)
                         item.preferredForwardBufferDuration = 5.0
-                        // Removed forced peak bitrate to enable ABR:
-                        // item.preferredPeakBitRate = 500_000
                         let player = AVPlayer(playerItem: item)
                         player.actionAtItemEnd = .none
                         player.automaticallyWaitsToMinimizeStalling = true
                         
                         self.preloadedItems[index] = item
                         self.preloadedPlayers[index] = player
-                        let totalElapsed = Date().timeIntervalSince(startTime)
-                        print("[\(Date())] Preload success => index \(index), elapsed: \(totalElapsed)s")
                         
-                        // Cleanup older entries
+                        let totalElapsed = Date().timeIntervalSince(startTime)
+                        print("[VideoFeedViewModel] Preload success => index \(index), elapsed: \(totalElapsed)s.")
+                        
                         self.cleanupOldPreloadedAssets(keepingIndex: index)
                     } else {
-                        print("[\(Date())] Preload fail => index \(index)")
+                        print("[VideoFeedViewModel] Preload fail => index \(index).")
                     }
                 }
             }
@@ -88,10 +98,9 @@ class VideoFeedViewModel: ObservableObject {
     private func cleanupOldPreloadedAssets(keepingIndex current: Int) {
         let low = max(0, current - 2)
         let high = min(videos.count - 1, current + 2)
+        preloadedItems = preloadedItems.filter { (key, _) in (low...high).contains(key) }
+        preloadedPlayers = preloadedPlayers.filter { (key, _) in (low...high).contains(key) }
         
-        preloadedItems = preloadedItems.filter { key, _ in (low...high).contains(key) }
-        preloadedPlayers = preloadedPlayers.filter { key, _ in (low...high).contains(key) }
-        
-        print("[\(Date())] cleanup => keeping indices \(low)...\(high)")
+        print("[VideoFeedViewModel] cleanup => keeping indices \(low) to \(high).")
     }
 }

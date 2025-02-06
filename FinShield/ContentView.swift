@@ -19,5 +19,8 @@ struct ContentView: View {
                 LoginView().environmentObject(authVM)
             }
         }
+        .onAppear {
+            print("[ContentView] onAppear => Checking auth state. isSignedIn = \(authVM.isSignedIn)")
+        }
     }
 }

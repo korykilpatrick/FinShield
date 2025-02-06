@@ -7,7 +7,9 @@ struct BottomNavBarView: View {
             Spacer()
             navButton(icon: "person.2", title: "Friends")
             Spacer()
-            Button(action: {}) {
+            Button(action: {
+                print("[BottomNavBarView] Plus button tapped.")
+            }) {
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 50))
                     .foregroundColor(.white)
@@ -20,10 +22,15 @@ struct BottomNavBarView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
         .background(Color.black)
+        .onAppear {
+            print("[BottomNavBarView] onAppear => rendering.")
+        }
     }
     
     private func navButton(icon: String, title: String) -> some View {
-        Button(action: {}) {
+        Button(action: {
+            print("[BottomNavBarView] \(title) button tapped.")
+        }) {
             VStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.system(size: 24))
@@ -33,12 +40,5 @@ struct BottomNavBarView: View {
                     .foregroundColor(.white)
             }
         }
-    }
-}
-
-struct BottomNavBarView_Previews: PreviewProvider {
-    static var previews: some View {
-        BottomNavBarView()
-            .previewLayout(.sizeThatFits)
     }
 }

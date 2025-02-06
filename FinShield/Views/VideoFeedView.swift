@@ -11,19 +11,27 @@ struct VideoFeedView: View {
             if viewModel.videos.isEmpty {
                 Text("No videos available")
                     .foregroundColor(.white)
+                    .onAppear {
+                        print("[VideoFeedView] No videos => .isEmpty.")
+                    }
             } else {
-                // Build an array of pages (each page is a VideoCellView)
+                // Each page is a VideoCellView, hosted in a UIHostingController
                 let pages: [UIHostingController<AnyView>] = viewModel.videos.enumerated().map { (index, video) in
                     let player = viewModel.getPreloadedPlayer(for: index)
-                    let cell = VideoCellView(video: video,
-                                             preloadedPlayer: player,
-                                             index: index,
-                                             activePage: $currentIndex)
+                    let cell = VideoCellView(
+                        video: video,
+                        preloadedPlayer: player,
+                        index: index,
+                        activePage: $currentIndex
+                    )
                     return UIHostingController(rootView: AnyView(cell))
                 }
                 
                 CustomPageView(pages: pages, currentPage: $currentIndex)
                     .ignoresSafeArea()
+                    .onAppear {
+                        print("[VideoFeedView] Showing page view => #videos = \(viewModel.videos.count)")
+                    }
             }
         }
     }

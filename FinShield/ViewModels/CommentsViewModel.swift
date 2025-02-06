@@ -12,12 +12,14 @@ class CommentsViewModel: ObservableObject {
     private var listenerRegistration: ListenerRegistration?
     
     init(videoID: String) {
+        print("[CommentsViewModel] init => videoID=\(videoID)")
         self.videoID = videoID
         fetchComments()
     }
     
     deinit {
         listenerRegistration?.remove()
+        print("[CommentsViewModel] deinit => removed listener for videoID=\(videoID)")
     }
     
     func fetchComments() {
@@ -33,19 +35,23 @@ class CommentsViewModel: ObservableObject {
                 
                 if let error = error {
                     self.error = error.localizedDescription
+                    print("[CommentsViewModel] Error => \(error.localizedDescription)")
                     return
                 }
                 
                 guard let docs = snapshot?.documents else { return }
+                
                 self.comments = docs.compactMap { doc in
-                    return Comment(from: doc.data(), id: doc.documentID)
+                    Comment(from: doc.data(), id: doc.documentID)
                 }
+                print("[CommentsViewModel] Updated => #comments=\(self.comments.count)")
             }
     }
     
     func addComment(text: String) {
         guard let currentUser = Auth.auth().currentUser else {
             self.error = "You must be signed in to comment"
+            print("[CommentsViewModel] addComment => user not signed in.")
             return
         }
         
@@ -61,6 +67,9 @@ class CommentsViewModel: ObservableObject {
             .addDocument(data: data) { [weak self] error in
                 if let error = error {
                     self?.error = error.localizedDescription
+                    print("[CommentsViewModel] addComment => error=\(error.localizedDescription)")
+                } else {
+                    print("[CommentsViewModel] addComment => success, text=\(text)")
                 }
             }
     }
@@ -69,6 +78,7 @@ class CommentsViewModel: ObservableObject {
         guard let currentUser = Auth.auth().currentUser,
               currentUser.uid == comment.uid else {
             self.error = "You can only delete your own comments"
+            print("[CommentsViewModel] deleteComment => not authorized.")
             return
         }
         
@@ -78,6 +88,9 @@ class CommentsViewModel: ObservableObject {
             .delete { [weak self] error in
                 if let error = error {
                     self?.error = error.localizedDescription
+                    print("[CommentsViewModel] deleteComment => error=\(error.localizedDescription)")
+                } else {
+                    print("[CommentsViewModel] deleteComment => success.")
                 }
             }
     }

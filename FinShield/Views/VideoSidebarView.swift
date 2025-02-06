@@ -10,13 +10,15 @@ struct VideoSidebarView: View {
     let onLike: () -> Void
     let onBookmark: () -> Void
     let onComment: () -> Void
-
+    
     var body: some View {
         VStack(spacing: 20) {
-            // Like button
+            // Like
             VStack(spacing: 4) {
                 Button(action: {
-                    withAnimation(.easeInOut(duration: 0.2)) { onLike() }
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        onLike()
+                    }
                 }) {
                     Image(systemName: isLiked ? "heart.fill" : "heart")
                         .font(.system(size: 30))
@@ -27,9 +29,12 @@ struct VideoSidebarView: View {
                     .font(.caption)
                     .foregroundColor(.white)
             }
-            // Comments button
+            
+            // Comment
             VStack(spacing: 4) {
-                Button(action: { onComment() }) {
+                Button(action: {
+                    onComment()
+                }) {
                     Image(systemName: "bubble.right")
                         .font(.system(size: 30))
                         .foregroundColor(.white)
@@ -38,10 +43,13 @@ struct VideoSidebarView: View {
                     .font(.caption)
                     .foregroundColor(.white)
             }
-            // Bookmark button
+            
+            // Bookmark
             VStack(spacing: 4) {
                 Button(action: {
-                    withAnimation(.easeInOut(duration: 0.2)) { onBookmark() }
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        onBookmark()
+                    }
                 }) {
                     Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
                         .font(.system(size: 30))
@@ -52,10 +60,11 @@ struct VideoSidebarView: View {
                     .font(.caption)
                     .foregroundColor(.white)
             }
-            // Share button
+            
+            // Share
             VStack(spacing: 4) {
                 Button {
-                    // Share action
+                    print("[VideoSidebarView] Share tapped => count=\(numShares)")
                 } label: {
                     Image(systemName: "arrowshape.turn.up.right")
                         .font(.system(size: 30))
@@ -66,25 +75,8 @@ struct VideoSidebarView: View {
                     .foregroundColor(.white)
             }
         }
-    }
-}
-
-struct VideoSidebarView_Previews: PreviewProvider {
-    static var previews: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            VideoSidebarView(
-                numLikes: 123,
-                numComments: 45,
-                numBookmarks: 67,
-                numShares: 8,
-                isLiked: false,
-                isBookmarked: false,
-                onLike: {},
-                onBookmark: {},
-                onComment: {}
-            )
-            .padding(.trailing, 10)
+        .onAppear {
+            print("[VideoSidebarView] onAppear => Likes=\(numLikes), Comments=\(numComments).")
         }
     }
 }

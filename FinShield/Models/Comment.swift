@@ -15,12 +15,16 @@ struct Comment: Identifiable {
     }
     
     init?(from dict: [String: Any], id: String) {
-        guard let uid = dict["uid"] as? String,
-              let username = dict["username"] as? String,
-              let text = dict["text"] as? String,
-              let timestamp = dict["timestamp"] as? Timestamp else {
+        guard
+            let uid = dict["uid"] as? String,
+            let username = dict["username"] as? String,
+            let text = dict["text"] as? String,
+            let timestamp = dict["timestamp"] as? Timestamp
+        else {
+            print("[Comment Model] init => failed for docID=\(id)")
             return nil
         }
+        
         self.id = id
         self.uid = uid
         self.username = username

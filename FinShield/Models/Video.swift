@@ -15,15 +15,19 @@ struct Video: Identifiable, Equatable {
     let numShares: Int
 
     init?(from dict: [String: Any], id: String) {
-        guard let urlString = dict["videoURL"] as? String,
-              urlString.contains("master.m3u8"),
-              let url = URL(string: urlString),
-              let caption = dict["caption"] as? String,
-              let videoName = dict["videoName"] as? String,
-              let videoTitle = dict["videoTitle"] as? String,
-              let username = dict["username"] as? String,
-              let ts = dict["timestamp"] as? Timestamp
-        else { return nil }
+        guard
+            let urlString = dict["videoURL"] as? String,
+            urlString.contains("master.m3u8"),
+            let url = URL(string: urlString),
+            let caption = dict["caption"] as? String,
+            let videoName = dict["videoName"] as? String,
+            let videoTitle = dict["videoTitle"] as? String,
+            let username = dict["username"] as? String,
+            let ts = dict["timestamp"] as? Timestamp
+        else {
+            print("[Video Model] Failed to init from dict => \(dict)")
+            return nil
+        }
         
         self.id = id
         self.videoName = videoName
