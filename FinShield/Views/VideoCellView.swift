@@ -23,7 +23,7 @@ struct VideoCellView: View {
     @State private var isCaptionExpanded = false
     @State private var isCaptionFullyExpanded = false
     
-    // Initialize state counts from the video object.
+    // Initialize counts from the video object.
     init(video: Video, preloadedPlayer: AVPlayer?) {
         self.video = video
         self.preloadedPlayer = preloadedPlayer
@@ -176,6 +176,9 @@ struct VideoCellView: View {
                             onBookmark: {
                                 isBookmarked.toggle()
                                 bookmarksCount += isBookmarked ? 1 : -1
+                            },
+                            onComment: {
+                                showComments = true
                             }
                         )
                         .padding(.trailing)

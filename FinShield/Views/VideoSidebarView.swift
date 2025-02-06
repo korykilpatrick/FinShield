@@ -9,15 +9,14 @@ struct VideoSidebarView: View {
     let isBookmarked: Bool
     let onLike: () -> Void
     let onBookmark: () -> Void
+    let onComment: () -> Void
 
     var body: some View {
         VStack(spacing: 20) {
             // Like button
             VStack(spacing: 4) {
                 Button(action: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        onLike()
-                    }
+                    withAnimation(.easeInOut(duration: 0.2)) { onLike() }
                 }) {
                     Image(systemName: isLiked ? "heart.fill" : "heart")
                         .font(.system(size: 30))
@@ -30,9 +29,7 @@ struct VideoSidebarView: View {
             }
             // Comments button
             VStack(spacing: 4) {
-                Button {
-                    // Show comments action
-                } label: {
+                Button(action: { onComment() }) {
                     Image(systemName: "bubble.right")
                         .font(.system(size: 30))
                         .foregroundColor(.white)
@@ -44,9 +41,7 @@ struct VideoSidebarView: View {
             // Bookmark button
             VStack(spacing: 4) {
                 Button(action: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        onBookmark()
-                    }
+                    withAnimation(.easeInOut(duration: 0.2)) { onBookmark() }
                 }) {
                     Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
                         .font(.system(size: 30))
@@ -86,7 +81,8 @@ struct VideoSidebarView_Previews: PreviewProvider {
                 isLiked: false,
                 isBookmarked: false,
                 onLike: {},
-                onBookmark: {}
+                onBookmark: {},
+                onComment: {}
             )
             .padding(.trailing, 10)
         }
