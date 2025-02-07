@@ -14,14 +14,16 @@ struct ContentView: View {
                     VStack {
                         Spacer()
                         BottomNavBarView()
-                            .opacity(scrubbingManager.isScrubbing ? 0 : 1)
                     }
+                    .opacity(scrubbingManager.isScrubbing ? 0 : 1)
                     .edgesIgnoringSafeArea(.bottom)
                 }
             } else {
-                LoginView().environmentObject(authVM)
+                LoginView()
             }
         }
+        // Provide authVM to all child views regardless of sign-in state.
+        .environmentObject(authVM)
         .onAppear {
             print("[ContentView] onAppear => Checking auth state. isSignedIn = \(authVM.isSignedIn)")
         }

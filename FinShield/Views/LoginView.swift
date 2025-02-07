@@ -9,11 +9,12 @@ struct LoginView: View {
     
     var body: some View {
         ZStack {
-            // Background gradient
-            LinearGradient(gradient: Gradient(colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)]),
-                          startPoint: .topLeading,
-                          endPoint: .bottomTrailing)
-                .ignoresSafeArea()
+            LinearGradient(
+                gradient: Gradient(colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.3)]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
             
             ScrollView {
                 VStack(spacing: 25) {
@@ -33,69 +34,39 @@ struct LoginView: View {
                     }
                     .padding(.top, 50)
                     
-                    // Sign in options
-                    VStack(spacing: 20) {
-                        // Social Sign in Buttons
-                        Button(action: {
-                            // Implement Apple Sign In
-                        }) {
-                            HStack {
-                                Image(systemName: "apple.logo")
-                                    .font(.title3)
-                                Text("Continue with Apple")
-                                    .font(.headline)
-                            }
-                            .frame(maxWidth: .infinity)
+                    // Email/Password Sign In Section
+                    VStack(spacing: 15) {
+                        TextField("Email", text: $email)
+                            .keyboardType(.emailAddress)
+                            .autocapitalization(.none)
                             .padding()
-                            .background(Color(.systemBackground))
-                            .cornerRadius(14)
-                            .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 5)
+                            .background(Color.white)
+                            .cornerRadius(8)
+                        
+                        if showPassword {
+                            TextField("Password", text: $password)
+                                .padding()
+                                .background(Color.white)
+                                .cornerRadius(8)
+                        } else {
+                            SecureField("Password", text: $password)
+                                .padding()
+                                .background(Color.white)
+                                .cornerRadius(8)
                         }
                         
                         Button(action: {
-                            // Implement Google Sign In
-                        }) {
-                            HStack {
-                                Image(systemName: "g.circle.fill")
-                                    .font(.title3)
-                                Text("Continue with Google")
-                                    .font(.headline)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color(.systemBackground))
-                            .cornerRadius(14)
-                            .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 5)
-                        }
-                        
-                        // Divider
-                        HStack {
-                            Rectangle()
-                                .frame(height: 1)
-                                .foregroundColor(.secondary.opacity(0.3))
-                            Text("or")
-                                .foregroundColor(.secondary)
-                                .font(.footnote)
-                            Rectangle()
-                                .frame(height: 1)
-                                .foregroundColor(.secondary.opacity(0.3))
-                        }
-                        
-                        // Anonymous Sign In
-                        Button(action: {
-                            withAnimation {
-                                isLoading = true
-                            }
-                            authVM.signInAnonymously()
+                            isLoading = true
+                            authVM.signInWithEmail(email: email, password: password)
                         }) {
                             HStack {
                                 if isLoading {
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                 } else {
-                                    Image(systemName: "person.fill.questionmark")
+                                    Image(systemName: "envelope")
                                         .font(.title3)
-                                    Text("Continue Anonymously")
+                                    Text("Sign In")
                                         .font(.headline)
                                 }
                             }
@@ -104,11 +75,73 @@ struct LoginView: View {
                             .background(Color.blue)
                             .foregroundColor(.white)
                             .cornerRadius(14)
-                            .shadow(color: Color.blue.opacity(0.3), radius: 5, x: 0, y: 5)
+                        }
+                        .disabled(isLoading)
+                        
+                        Button(action: {
+                            isLoading = true
+                            authVM.createUser(email: email, password: password)
+                        }) {
+                            HStack {
+                                if isLoading {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                } else {
+                                    Image(systemName: "person.badge.plus")
+                                        .font(.title3)
+                                    Text("Create Account")
+                                        .font(.headline)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(14)
                         }
                         .disabled(isLoading)
                     }
                     .padding(.horizontal)
+                    
+                    // Divider
+                    HStack {
+                        Rectangle()
+                            .frame(height: 1)
+                            .foregroundColor(.secondary.opacity(0.3))
+                        Text("or")
+                            .foregroundColor(.secondary)
+                            .font(.footnote)
+                        Rectangle()
+                            .frame(height: 1)
+                            .foregroundColor(.secondary.opacity(0.3))
+                    }
+                    
+                    // Anonymous Sign In
+                    Button(action: {
+                        withAnimation {
+                            isLoading = true
+                        }
+                        authVM.signInAnonymously()
+                    }) {
+                        HStack {
+                            if isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            } else {
+                                Image(systemName: "person.fill.questionmark")
+                                    .font(.title3)
+                                Text("Continue Anonymously")
+                                    .font(.headline)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(14)
+                        .shadow(color: Color.blue.opacity(0.3), radius: 5, x: 0, y: 5)
+                    }
+                    .disabled(isLoading)
                     
                     // Terms and Privacy
                     VStack(spacing: 10) {
@@ -135,10 +168,4 @@ struct LoginView: View {
             }
         }
     }
-}
-
-// Preview
-#Preview {
-    LoginView()
-        .environmentObject(AuthenticationViewModel())
 }

@@ -21,6 +21,26 @@ class AuthenticationViewModel: ObservableObject {
         }
     }
     
+    func createUser(email: String, password: String) {
+        Auth.auth().createUser(withEmail: email, password: password) { [weak self] result, error in
+            if let error = error {
+                print("Create user failed: \(error.localizedDescription)")
+            } else {
+                self?.isSignedIn = true
+            }
+        }
+    }
+
+    func signInWithEmail(email: String, password: String) {
+        Auth.auth().signIn(withEmail: email, password: password) { [weak self] result, error in
+            if let error = error {
+                print("Email sign-in failed: \(error.localizedDescription)")
+            } else {
+                self?.isSignedIn = true
+            }
+        }
+    }
+    
     func signOut() {
         do {
             try Auth.auth().signOut()

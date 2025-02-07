@@ -1,11 +1,18 @@
 import SwiftUI
+import FirebaseAuth
 
 struct BottomNavBarView: View {
+    @EnvironmentObject var authVM: AuthenticationViewModel
+
     var body: some View {
         HStack {
-            navButton(icon: "house", title: "Home")
+            navButton(icon: "house", title: "Home") {
+                print("[BottomNavBarView] Home tapped.")
+            }
             Spacer()
-            navButton(icon: "person.2", title: "Friends")
+            navButton(icon: "person.2", title: "Friends") {
+                print("[BottomNavBarView] Friends tapped.")
+            }
             Spacer()
             Button(action: {
                 print("[BottomNavBarView] Plus button tapped.")
@@ -15,9 +22,19 @@ struct BottomNavBarView: View {
                     .foregroundColor(.white)
             }
             Spacer()
-            navButton(icon: "tray", title: "Inbox")
+            navButton(icon: "tray", title: "Inbox") {
+                print("[BottomNavBarView] Inbox tapped.")
+            }
             Spacer()
-            navButton(icon: "person.crop.circle", title: "Profile")
+            if let currentUser = Auth.auth().currentUser, currentUser.isAnonymous {
+                navButton(icon: "person.crop.circle", title: "Sign In") {
+                    authVM.signOut()
+                }
+            } else {
+                navButton(icon: "person.crop.circle", title: "Profile") {
+                    print("[BottomNavBarView] Profile tapped.")
+                }
+            }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
@@ -27,10 +44,8 @@ struct BottomNavBarView: View {
         }
     }
     
-    private func navButton(icon: String, title: String) -> some View {
-        Button(action: {
-            print("[BottomNavBarView] \(title) button tapped.")
-        }) {
+    private func navButton(icon: String, title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.system(size: 24))
