@@ -1,6 +1,31 @@
 import SwiftUI
 import AVKit
 
+// A tap recognizer that fails if the touch moves too far.
+class NoSwipeTapGestureRecognizer: UITapGestureRecognizer {
+    private var initialTouchPoint: CGPoint = .zero
+    let movementThreshold: CGFloat = 10  // adjust as needed
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        if let touch = touches.first, let view = self.view {
+            initialTouchPoint = touch.location(in: view)
+        }
+        super.touchesBegan(touches, with: event)
+    }
+    
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        if let touch = touches.first, let view = self.view {
+            let currentPoint = touch.location(in: view)
+            let dx = abs(currentPoint.x - initialTouchPoint.x)
+            let dy = abs(currentPoint.y - initialTouchPoint.y)
+            if dx > movementThreshold || dy > movementThreshold {
+                state = .failed
+            }
+        }
+        super.touchesMoved(touches, with: event)
+    }
+}
+
 class LoggingAVPlayerViewController: AVPlayerViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -24,45 +49,50 @@ class LoggingAVPlayerViewController: AVPlayerViewController {
     }
 }
 
-/// Wraps an AVPlayer with a dedicated UITapGestureRecognizer that calls `onTap`.
 struct CustomVideoPlayer: UIViewControllerRepresentable {
     let player: AVPlayer
     var onTap: (() -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
-        print("[CustomVideoPlayer] makeCoordinator => creating Coordinator.")
         return Coordinator(self)
     }
-
+    
     func makeUIViewController(context: Context) -> AVPlayerViewController {
-        print("[CustomVideoPlayer] makeUIViewController => building LoggingAVPlayerViewController.")
         let controller = LoggingAVPlayerViewController()
         controller.player = player
         controller.showsPlaybackControls = false
         controller.videoGravity = .resizeAspectFill
-
-        // Attach a UITapGestureRecognizer directly to the controller’s view.
-        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap))
+        
+        let tap = NoSwipeTapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap))
         tap.cancelsTouchesInView = false
         controller.view.addGestureRecognizer(tap)
-
+        
+        // Log any found scroll view in the hierarchy (for debugging).
+        DispatchQueue.main.async {
+            var current: UIView? = controller.view
+            while let view = current {
+                if let scrollView = view as? UIScrollView {
+                    print("[CustomVideoPlayer] Found UIScrollView in superview chain: \(scrollView)")
+                    break
+                }
+                current = view.superview
+            }
+        }
+        
         controller.view.isUserInteractionEnabled = true
         controller.contentOverlayView?.isUserInteractionEnabled = true
-
         return controller
     }
-
+    
     func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
-        print("[CustomVideoPlayer] updateUIViewController => updating player ref.")
         uiViewController.player = player
     }
-
+    
     class Coordinator: NSObject {
         let parent: CustomVideoPlayer
-
+        
         init(_ parent: CustomVideoPlayer) {
             self.parent = parent
-            super.init()
             print("[CustomVideoPlayer.Coordinator] init => done.")
         }
         

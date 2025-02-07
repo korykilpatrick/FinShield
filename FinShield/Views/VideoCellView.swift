@@ -20,12 +20,22 @@ struct VideoCellView: View {
     @State private var commentsCount = 0
     @State private var sharesCount: Int
     @State private var showComments = false
-    @State private var commentsListener: ListenerRegistration?
 
     @State private var isCaptionExpanded = false
     @State private var isCaptionFullyExpanded = false
 
     private let db = Firestore.firestore()
+
+    // Compute a shortened caption as needed.
+    private var displayedCaption: String {
+        if !isCaptionExpanded {
+            return video.caption.count > 50 ? String(video.caption.prefix(50)) + "..." : video.caption
+        } else if !isCaptionFullyExpanded {
+            return video.caption.count > 200 ? String(video.caption.prefix(200)) + "..." : video.caption
+        } else {
+            return video.caption
+        }
+    }
 
     init(video: Video, preloadedPlayer: AVPlayer?, index: Int, activePage: Binding<Int>) {
         self.video = video
@@ -37,168 +47,70 @@ struct VideoCellView: View {
         _sharesCount = State(initialValue: video.numShares)
     }
 
-    private var displayedCaption: String {
-        if !isCaptionExpanded {
-            return video.caption.count > 50 ? String(video.caption.prefix(50)) + "..." : video.caption
-        } else if !isCaptionFullyExpanded {
-            return video.caption.count > 200 ? String(video.caption.prefix(200)) + "..." : video.caption
-        } else {
-            return video.caption
-        }
-    }
-
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Video content layer
+                // VIDEO LAYER: Full-screen video player.
                 Group {
                     if let player = player {
-                        // Pass an empty closure here; we now handle taps on the outer view.
-                        CustomVideoPlayer(player: player)
-                            .onAppear {
-                                print("[VideoCellView] onAppear => Start video \(video.id), index=\(index).")
-                                if activePage == index {
-                                    player.play()
-                                    print("[VideoCellView] Auto-play => video \(video.id).")
-                                }
+                        CustomVideoPlayer(player: player, onTap: {
+                            togglePlayback()
+                        })
+                        .ignoresSafeArea()
+                        .onAppear {
+                            print("[VideoCellView] onAppear => Start video \(video.id), index=\(index).")
+                            if activePage == index {
+                                player.play()
+                                print("[VideoCellView] Auto-play => video \(video.id).")
                             }
-                            .onDisappear {
-                                print("[VideoCellView] onDisappear => Pause video \(video.id).")
-                                player.pause()
-                            }
+                        }
+                        .onDisappear {
+                            print("[VideoCellView] onDisappear => Pause video \(video.id).")
+                            player.pause()
+                        }
                     } else if isLoading {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             .background(Color.black)
+                            .ignoresSafeArea()
                             .onAppear {
                                 print("[VideoCellView] isLoading => video \(video.id).")
                             }
                     } else {
-                        Color.black
+                        Color.black.ignoresSafeArea()
                     }
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .ignoresSafeArea()
-
-                // Captions and sidebar layer
-                VStack {
-                    Spacer()
-                    HStack(alignment: .bottom) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(video.username)
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.white)
-                            Text(video.videoTitle)
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(.white)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(displayedCaption)
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.white)
-                                    .onTapGesture {
-                                        if !isCaptionExpanded {
-                                            withAnimation { isCaptionExpanded = true }
-                                            print("[VideoCellView] Expanding caption => video \(video.id)")
-                                        }
-                                    }
-                                if video.caption.count > 50 && isCaptionExpanded {
-                                    if video.caption.count > 200 {
-                                        if isCaptionFullyExpanded {
-                                            Button("Show Less") {
-                                                withAnimation {
-                                                    isCaptionExpanded = false
-                                                    isCaptionFullyExpanded = false
-                                                }
-                                                print("[VideoCellView] Collapsing caption => video \(video.id)")
-                                            }
-                                            .font(.caption)
-                                            .foregroundColor(.blue)
-                                        } else {
-                                            HStack {
-                                                Button("Show More") {
-                                                    withAnimation {
-                                                        isCaptionFullyExpanded = true
-                                                    }
-                                                    print("[VideoCellView] Fully expanding => video \(video.id)")
-                                                }
-                                                .font(.caption)
-                                                .foregroundColor(.blue)
-                                                
-                                                Button("Show Less") {
-                                                    withAnimation {
-                                                        isCaptionExpanded = false
-                                                        isCaptionFullyExpanded = false
-                                                    }
-                                                    print("[VideoCellView] Collapsing caption => video \(video.id)")
-                                                }
-                                                .font(.caption)
-                                                .foregroundColor(.blue)
-                                            }
-                                        }
-                                    } else {
-                                        Button("Show Less") {
-                                            withAnimation {
-                                                isCaptionExpanded = false
-                                                isCaptionFullyExpanded = false
-                                            }
-                                            print("[VideoCellView] Collapsing caption => video \(video.id)")
-                                        }
-                                        .font(.caption)
-                                        .foregroundColor(.blue)
-                                    }
-                                }
-                            }
-                            Text(DateUtils.formattedDate(from: video.timestamp))
-                                .font(.system(size: 12))
-                                .foregroundColor(.white)
-                        }
-                        .padding(.leading)
-                        .padding(.bottom, 20)
-                        
-                        Spacer()
-                        
-                        VideoSidebarView(
-                            numLikes: likesCount,
-                            numComments: commentsCount,
-                            numBookmarks: bookmarksCount,
-                            numShares: sharesCount,
-                            isLiked: isLiked,
-                            isBookmarked: isBookmarked,
-                            onLike: {
-                                isLiked.toggle()
-                                likesCount += isLiked ? 1 : -1
-                                print("[VideoCellView] onLike => isLiked=\(isLiked), total=\(likesCount). VideoID=\(video.id)")
-                            },
-                            onBookmark: {
-                                isBookmarked.toggle()
-                                bookmarksCount += isBookmarked ? 1 : -1
-                                print("[VideoCellView] onBookmark => isBookmarked=\(isBookmarked), total=\(bookmarksCount). VideoID=\(video.id)")
-                            },
-                            onComment: {
-                                showComments = true
-                                print("[VideoCellView] onComment => show sheet => VideoID=\(video.id)")
-                            }
-                        )
-                        .padding(.trailing)
-                        .padding(.bottom, 20)
-                    }
-                }
-                .background(
-                    LinearGradient(
-                        gradient: Gradient(colors: [.clear, .black.opacity(0.3)]),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .zIndex(3)
             }
-            // Add a simultaneous tap gesture on the entire cell.
-            .simultaneousGesture(
-                TapGesture()
-                    .onEnded {
-                        print("[VideoCellView] Outer tap detected => toggling playback for video \(video.id).")
-                        togglePlayback()
+            // INTERACTIVE OVERLAY: Only covers the bottom area.
+            .overlay(
+                BottomOverlayView(
+                    video: video,
+                    displayedCaption: displayedCaption,
+                    isCaptionExpanded: $isCaptionExpanded,
+                    isCaptionFullyExpanded: $isCaptionFullyExpanded,
+                    likesCount: $likesCount,
+                    bookmarksCount: $bookmarksCount,
+                    commentsCount: commentsCount,
+                    isLiked: isLiked,
+                    isBookmarked: isBookmarked,
+                    onLike: {
+                        isLiked.toggle()
+                        likesCount += isLiked ? 1 : -1
+                        print("[VideoCellView] onLike => isLiked=\(isLiked), total=\(likesCount). VideoID=\(video.id)")
+                    },
+                    onBookmark: {
+                        isBookmarked.toggle()
+                        bookmarksCount += isBookmarked ? 1 : -1
+                        print("[VideoCellView] onBookmark => isBookmarked=\(isBookmarked), total=\(bookmarksCount). VideoID=\(video.id)")
+                    },
+                    onComment: {
+                        showComments = true
+                        print("[VideoCellView] onComment => show sheet => VideoID=\(video.id)")
                     }
+                )
+                .padding(.horizontal)
+                .padding(.bottom, 20),  // increased bottom padding for extra room
+                alignment: .bottom
             )
         }
         .onAppear {
@@ -242,7 +154,8 @@ struct VideoCellView: View {
         let startTime = Date()
         print("[VideoCellView] setupPlayer => started at \(startTime). VideoID=\(video.id)")
         
-        commentsListener = db.collection("videos").document(video.id)
+        // Listen for comment updates.
+        _ = db.collection("videos").document(video.id)
             .collection("comments")
             .addSnapshotListener { snapshot, _ in
                 commentsCount = snapshot?.documents.count ?? 0
@@ -323,8 +236,115 @@ struct VideoCellView: View {
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         NotificationCenter.default.removeObserver(self)
-        commentsListener?.remove()
         player = nil
         isLoading = false
+    }
+}
+
+private struct BottomOverlayView: View {
+    let video: Video
+    let displayedCaption: String
+    @Binding var isCaptionExpanded: Bool
+    @Binding var isCaptionFullyExpanded: Bool
+    @Binding var likesCount: Int
+    @Binding var bookmarksCount: Int
+    let commentsCount: Int
+    let isLiked: Bool
+    let isBookmarked: Bool
+    let onLike: () -> Void
+    let onBookmark: () -> Void
+    let onComment: () -> Void
+
+    var body: some View {
+        HStack(alignment: .bottom) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(video.username)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+                Text(video.videoTitle)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(displayedCaption)
+                        .font(.system(size: 14))
+                        .foregroundColor(.white)
+                        .onTapGesture {
+                            if !isCaptionExpanded {
+                                withAnimation { isCaptionExpanded = true }
+                                print("[BottomOverlayView] Expanding caption => video \(video.id)")
+                            }
+                        }
+                    if video.caption.count > 50 && isCaptionExpanded {
+                        if video.caption.count > 200 {
+                            if isCaptionFullyExpanded {
+                                Button("Show Less") {
+                                    withAnimation {
+                                        isCaptionExpanded = false
+                                        isCaptionFullyExpanded = false
+                                    }
+                                    print("[BottomOverlayView] Collapsing caption => video \(video.id)")
+                                }
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                            } else {
+                                HStack {
+                                    Button("Show More") {
+                                        withAnimation { isCaptionFullyExpanded = true }
+                                        print("[BottomOverlayView] Fully expanding => video \(video.id)")
+                                    }
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                                    
+                                    Button("Show Less") {
+                                        withAnimation {
+                                            isCaptionExpanded = false
+                                            isCaptionFullyExpanded = false
+                                        }
+                                        print("[BottomOverlayView] Collapsing caption => video \(video.id)")
+                                    }
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                                }
+                            }
+                        } else {
+                            Button("Show Less") {
+                                withAnimation {
+                                    isCaptionExpanded = false
+                                    isCaptionFullyExpanded = false
+                                }
+                                print("[BottomOverlayView] Collapsing caption => video \(video.id)")
+                            }
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                        }
+                    }
+                }
+                // Add extra bottom padding here so the date isn’t clipped.
+                Text(DateUtils.formattedDate(from: video.timestamp))
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+                    .padding(.bottom, 10)
+            }
+            Spacer()
+            VideoSidebarView(
+                numLikes: likesCount,
+                numComments: commentsCount,
+                numBookmarks: bookmarksCount,
+                numShares: video.numShares,
+                isLiked: isLiked,
+                isBookmarked: isBookmarked,
+                onLike: onLike,
+                onBookmark: onBookmark,
+                onComment: onComment
+            )
+        }
+        .padding()
+        .background(
+            LinearGradient(
+                gradient: Gradient(colors: [.clear, .black.opacity(0.3)]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
     }
 }
