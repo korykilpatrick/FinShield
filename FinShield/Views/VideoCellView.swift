@@ -98,7 +98,7 @@ struct VideoCellView: View {
                     alignment: .bottom
                 )
                 .padding(.bottom, 10)
-                .padding(.leading, 4)
+                .padding(.leading, 10)
             }
         }
         .onAppear {
@@ -275,7 +275,7 @@ private struct BottomOverlayView: View {
                 onComment: onComment
             )
         }
-        .padding(.leading, 5)
+        .padding(.leading, 10)
         .padding(.vertical, 5)
         .background(
             LinearGradient(

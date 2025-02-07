@@ -73,7 +73,7 @@ struct VideoSidebarView: View {
                 Text("\(numShares.abbreviated)")
                     .font(.caption)
                     .foregroundColor(.white)
-                    .padding(.bottom, 15)
+                    .padding(.bottom, 35)
             }
         }
         .onAppear {
