@@ -25,7 +25,7 @@ struct VideoSidebarView: View {
                         .foregroundColor(isLiked ? .red : .white)
                         .scaleEffect(isLiked ? 1.2 : 1.0)
                 }
-                Text("\(numLikes)")
+                Text("\(numLikes.abbreviated)")
                     .font(.caption)
                     .foregroundColor(.white)
             }
@@ -39,7 +39,7 @@ struct VideoSidebarView: View {
                         .font(.system(size: 30))
                         .foregroundColor(.white)
                 }
-                Text("\(numComments)")
+                Text("\(numComments.abbreviated)")
                     .font(.caption)
                     .foregroundColor(.white)
             }
@@ -56,7 +56,7 @@ struct VideoSidebarView: View {
                         .foregroundColor(.white)
                         .scaleEffect(isBookmarked ? 1.2 : 1.0)
                 }
-                Text("\(numBookmarks)")
+                Text("\(numBookmarks.abbreviated)")
                     .font(.caption)
                     .foregroundColor(.white)
             }
@@ -70,9 +70,10 @@ struct VideoSidebarView: View {
                         .font(.system(size: 30))
                         .foregroundColor(.white)
                 }
-                Text("\(numShares)")
+                Text("\(numShares.abbreviated)")
                     .font(.caption)
                     .foregroundColor(.white)
+                    .padding(.bottom, 15)
             }
         }
         .onAppear {

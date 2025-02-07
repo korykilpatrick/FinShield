@@ -287,7 +287,9 @@ private struct BottomOverlayView: View {
                 onComment: onComment
             )
         }
-        .padding()
+        .padding(.leading, 20)
+        .padding(.trailing, 4)
+        .padding(.vertical, 10)
         .background(
             LinearGradient(
                 gradient: Gradient(colors: [.clear, .black.opacity(0.3)]),
