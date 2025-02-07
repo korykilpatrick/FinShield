@@ -30,27 +30,16 @@ struct VideoScrubberView: View {
                     .shadow(radius: isExpanded ? 5 : 0)
             }
             .frame(height: isExpanded ? 40 : 20)
-            .gesture(
-                LongPressGesture(minimumDuration: 0.15)
-                    .updating($isPressing) { current, state, _ in state = current }
-                    .onEnded { _ in
+            .contentShape(Rectangle()) // ensure the whole width is hittable
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        let location = drag.location.x
+                        let ratio = max(0, min(1, location / trackWidth))
+                        onScrub(ratio * totalDuration)
                         withAnimation {
                             isExpanded = true
                             scrubbingManager.isScrubbing = true
-                        }
-                    }
-                    .sequenced(before: DragGesture(minimumDistance: 0))
-                    .onChanged { value in
-                        switch value {
-                        case .first(true):
-                            break
-                        case .second(true, let drag?):
-                            let location = drag.location.x
-                            let ratio = max(0, min(1, location / trackWidth))
-                            let newTime = ratio * totalDuration
-                            onScrub(newTime)
-                        default:
-                            break
                         }
                     }
                     .onEnded { _ in
