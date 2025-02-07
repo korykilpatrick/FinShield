@@ -38,6 +38,7 @@ struct BottomNavBarView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
+        .padding(.bottom, 10)
         .background(Color.black)
         .onAppear {
             print("[BottomNavBarView] onAppear => rendering.")

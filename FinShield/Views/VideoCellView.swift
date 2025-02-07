@@ -119,7 +119,7 @@ struct VideoCellView: View {
                             }
                         )
                         .padding(.horizontal, 20)
-                        .padding(.bottom, 20)
+                        .padding(.bottom, 30)
                     }
                     .ignoresSafeArea(),
                     alignment: .bottom
