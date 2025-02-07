@@ -1,9 +1,25 @@
 import SwiftUI
 
+// Simple placeholder modifier for custom placeholder styling.
+extension View {
+    func placeholder<Content: View>(
+        when shouldShow: Bool,
+        alignment: Alignment = .leading,
+        @ViewBuilder placeholder: () -> Content) -> some View {
+            ZStack(alignment: alignment) {
+                placeholder().opacity(shouldShow ? 1 : 0)
+                self
+            }
+        }
+}
+
 struct LoginView: View {
     @EnvironmentObject var authVM: AuthenticationViewModel
+    @State private var isLoginMode: Bool = true
     @State private var email = ""
     @State private var password = ""
+    @State private var displayName = ""
+    @State private var handle = ""
     @State private var isLoading = false
     @State private var showPassword = false
     
@@ -18,7 +34,7 @@ struct LoginView: View {
             
             ScrollView {
                 VStack(spacing: 25) {
-                    // Logo and Title
+                    // Header
                     VStack(spacing: 15) {
                         Image(systemName: "shield.lefthalf.filled")
                             .font(.system(size: 60))
@@ -34,28 +50,69 @@ struct LoginView: View {
                     }
                     .padding(.top, 50)
                     
-                    // Email/Password Sign In Section
+                    // Form Fields
                     VStack(spacing: 15) {
-                        TextField("Email", text: $email)
-                            .foregroundColor(.black)
+                        if !isLoginMode {
+                            // Sign Up fields: Display Name and @handle.
+                            TextField("", text: $displayName)
+                                .placeholder(when: displayName.isEmpty) {
+                                    Text("Display Name")
+                                        .foregroundColor(Color(white: 0.4))
+                                }
+                                .padding()
+                                .background(Color.white)
+                                .cornerRadius(8)
+                                .foregroundColor(.black)
+                            
+                            TextField("", text: $handle)
+                                .placeholder(when: handle.isEmpty) {
+                                    Text("handle")
+                                        .foregroundColor(Color(white: 0.4))
+                                }
+                                .padding()
+                                .background(Color.white)
+                                .cornerRadius(8)
+                                .foregroundColor(.black)
+                        }
+                        
+                        // Email field.
+                        TextField("", text: $email)
+                            .placeholder(when: email.isEmpty) {
+                                Text("Email")
+                                    .foregroundColor(Color(white: 0.4))
+                            }
                             .padding()
                             .background(Color.white)
                             .cornerRadius(8)
+                            .foregroundColor(.black)
                         
+                        // Password field.
                         if showPassword {
-                            TextField("Password", text: $password)
-                                .foregroundColor(.black)
+                            TextField("", text: $password)
+                                .placeholder(when: password.isEmpty) {
+                                    Text("Password")
+                                        .foregroundColor(Color(white: 0.4))
+                                }
                                 .padding()
                                 .background(Color.white)
                                 .cornerRadius(8)
+                                .foregroundColor(.black)
                         } else {
-                            SecureField("Password", text: $password)
-                                .foregroundColor(.black)
+                            SecureField("", text: $password)
+                                .placeholder(when: password.isEmpty) {
+                                    Text("Password")
+                                        .foregroundColor(Color(white: 0.4))
+                                }
                                 .padding()
                                 .background(Color.white)
                                 .cornerRadius(8)
+                                .foregroundColor(.black)
                         }
-                        
+                    }
+                    .padding(.horizontal)
+                    
+                    // Buttons
+                    if isLoginMode {
                         Button(action: {
                             isLoading = true
                             authVM.signInWithEmail(email: email, password: password)
@@ -67,7 +124,7 @@ struct LoginView: View {
                                 } else {
                                     Image(systemName: "envelope")
                                         .font(.title3)
-                                    Text("Sign In")
+                                    Text("Login")
                                         .font(.headline)
                                 }
                             }
@@ -79,9 +136,21 @@ struct LoginView: View {
                         }
                         .disabled(isLoading)
                         
+                        // Toggle to Sign Up mode.
+                        Button(action: {
+                            withAnimation {
+                                isLoginMode = false
+                            }
+                        }) {
+                            Text("Sign Up")
+                                .font(.headline)
+                                .foregroundColor(.blue)
+                        }
+                    } else {
+                        // Sign Up mode: Show only the Sign Up button.
                         Button(action: {
                             isLoading = true
-                            authVM.createUser(email: email, password: password)
+                            authVM.createUser(email: email, password: password, displayName: displayName, handle: handle)
                         }) {
                             HStack {
                                 if isLoading {
@@ -90,7 +159,7 @@ struct LoginView: View {
                                 } else {
                                     Image(systemName: "person.badge.plus")
                                         .font(.title3)
-                                    Text("Create Account")
+                                    Text("Sign Up")
                                         .font(.headline)
                                 }
                             }
@@ -101,10 +170,20 @@ struct LoginView: View {
                             .cornerRadius(14)
                         }
                         .disabled(isLoading)
+                        
+                        // Toggle back to Login mode.
+                        Button(action: {
+                            withAnimation {
+                                isLoginMode = true
+                            }
+                        }) {
+                            Text("Already have an account? Login")
+                                .font(.headline)
+                                .foregroundColor(.blue)
+                        }
                     }
-                    .padding(.horizontal)
                     
-                    // Error Message Display
+                    // Display authentication errors if any.
                     if let errorMessage = authVM.authError {
                         Text(errorMessage)
                             .foregroundColor(.red)
@@ -125,11 +204,9 @@ struct LoginView: View {
                             .foregroundColor(.secondary.opacity(0.3))
                     }
                     
-                    // Anonymous Sign In
+                    // Anonymous Sign In Button.
                     Button(action: {
-                        withAnimation {
-                            isLoading = true
-                        }
+                        withAnimation { isLoading = true }
                         authVM.signInAnonymously()
                     }) {
                         HStack {
@@ -173,9 +250,7 @@ struct LoginView: View {
             }
         }
         .onReceive(authVM.$authError) { newError in
-            if newError != nil {
-                isLoading = false
-            }
+            if newError != nil { isLoading = false }
         }
     }
 }
