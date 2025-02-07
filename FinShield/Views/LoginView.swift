@@ -37,19 +37,20 @@ struct LoginView: View {
                     // Email/Password Sign In Section
                     VStack(spacing: 15) {
                         TextField("Email", text: $email)
-                            .keyboardType(.emailAddress)
-                            .autocapitalization(.none)
+                            .foregroundColor(.black)
                             .padding()
                             .background(Color.white)
                             .cornerRadius(8)
                         
                         if showPassword {
                             TextField("Password", text: $password)
+                                .foregroundColor(.black)
                                 .padding()
                                 .background(Color.white)
                                 .cornerRadius(8)
                         } else {
                             SecureField("Password", text: $password)
+                                .foregroundColor(.black)
                                 .padding()
                                 .background(Color.white)
                                 .cornerRadius(8)
@@ -103,6 +104,14 @@ struct LoginView: View {
                     }
                     .padding(.horizontal)
                     
+                    // Error Message Display
+                    if let errorMessage = authVM.authError {
+                        Text(errorMessage)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 8)
+                    }
+                    
                     // Divider
                     HStack {
                         Rectangle()
@@ -150,21 +159,22 @@ struct LoginView: View {
                             .foregroundColor(.secondary)
                         
                         HStack(spacing: 3) {
-                            Button("Terms of Service") {
-                                // Handle terms action
-                            }
+                            Button("Terms of Service") { }
                             Text("and")
                                 .font(.footnote)
                                 .foregroundColor(.secondary)
-                            Button("Privacy Policy") {
-                                // Handle privacy action
-                            }
+                            Button("Privacy Policy") { }
                         }
                         .font(.footnote)
                     }
                     .padding(.top)
                 }
                 .padding(.horizontal)
+            }
+        }
+        .onReceive(authVM.$authError) { newError in
+            if newError != nil {
+                isLoading = false
             }
         }
     }
