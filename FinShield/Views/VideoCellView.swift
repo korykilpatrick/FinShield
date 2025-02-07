@@ -308,10 +308,7 @@ private struct BottomOverlayView: View {
                         }
                     }
                 }
-                Text(DateUtils.formattedDate(from: video.timestamp))
-                    .font(.system(size: 12))
-                    .foregroundColor(.white)
-                    .padding(.bottom, video.caption.isEmpty ? 12 : 10)
+                // Date text removed.
             }
             Spacer()
             VideoSidebarView(
