@@ -270,5 +270,6 @@ private struct BottomOverlayView: View {
                 endPoint: .bottom
             )
         )
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
