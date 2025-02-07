@@ -3,15 +3,18 @@ import FirebaseAuth
 
 struct ContentView: View {
     @StateObject var authVM = AuthenticationViewModel()
-    
+    @StateObject var scrubbingManager = ScrubbingManager()
+
     var body: some View {
         NavigationView {
             if authVM.isSignedIn {
                 ZStack {
                     VideoFeedView()
+                        .environmentObject(scrubbingManager)
                     VStack {
                         Spacer()
                         BottomNavBarView()
+                            .opacity(scrubbingManager.isScrubbing ? 0 : 1)
                     }
                     .edgesIgnoringSafeArea(.bottom)
                 }

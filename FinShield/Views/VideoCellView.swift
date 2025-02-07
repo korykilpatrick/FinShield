@@ -11,6 +11,7 @@ struct VideoCellView: View {
     @State private var player: AVPlayer?
     @State private var isLoading = true
 
+    // Interaction states
     @State private var isLiked = false
     @State private var likesCount: Int
     @State private var isBookmarked = false
@@ -19,8 +20,16 @@ struct VideoCellView: View {
     @State private var sharesCount: Int
     @State private var showComments = false
 
+    // Caption expansions
     @State private var isCaptionExpanded = false
     @State private var isCaptionFullyExpanded = false
+
+    // Track time/duration for scrubber
+    @State private var currentTime: Double = 0
+    @State private var totalDuration: Double = 1
+    @State private var timeObserverToken: Any?
+
+    @EnvironmentObject var scrubbingManager: ScrubbingManager
 
     private let db = Firestore.firestore()
 
@@ -47,7 +56,7 @@ struct VideoCellView: View {
     var body: some View {
         GeometryReader { _ in
             ZStack {
-                // VIDEO LAYER
+                // Video layer
                 Group {
                     if let player = player {
                         CustomVideoPlayer(player: player, onTap: {
@@ -55,7 +64,9 @@ struct VideoCellView: View {
                         })
                         .ignoresSafeArea()
                         .onAppear {
-                            if activePage == index { player.play() }
+                            if activePage == index {
+                                player.play()
+                            }
                         }
                         .onDisappear {
                             player.pause()
@@ -69,40 +80,65 @@ struct VideoCellView: View {
                         Color.black.ignoresSafeArea()
                     }
                 }
-                // INTERACTIVE OVERLAY
+                // Bottom overlay (caption and sidebar)
                 .overlay(
-                    BottomOverlayView(
-                        video: video,
-                        displayedCaption: displayedCaption,
-                        isCaptionExpanded: $isCaptionExpanded,
-                        isCaptionFullyExpanded: $isCaptionFullyExpanded,
-                        likesCount: $likesCount,
-                        bookmarksCount: $bookmarksCount,
-                        commentsCount: commentsCount,
-                        isLiked: isLiked,
-                        isBookmarked: isBookmarked,
-                        onLike: {
-                            isLiked.toggle()
-                            likesCount += isLiked ? 1 : -1
-                        },
-                        onBookmark: {
-                            isBookmarked.toggle()
-                            bookmarksCount += isBookmarked ? 1 : -1
-                        },
-                        onComment: {
-                            showComments = true
-                        }
-                    ),
+                    ZStack(alignment: .bottom) {
+                        // The video data (caption and sidebar) remains fixed.
+                        BottomOverlayView(
+                            video: video,
+                            displayedCaption: displayedCaption,
+                            isCaptionExpanded: $isCaptionExpanded,
+                            isCaptionFullyExpanded: $isCaptionFullyExpanded,
+                            likesCount: $likesCount,
+                            bookmarksCount: $bookmarksCount,
+                            commentsCount: commentsCount,
+                            isLiked: isLiked,
+                            isBookmarked: isBookmarked,
+                            onLike: {
+                                isLiked.toggle()
+                                likesCount += isLiked ? 1 : -1
+                            },
+                            onBookmark: {
+                                isBookmarked.toggle()
+                                bookmarksCount += isBookmarked ? 1 : -1
+                            },
+                            onComment: { showComments = true }
+                        )
+                        .opacity(scrubbingManager.isScrubbing ? 0 : 1)
+                        // Position the BottomOverlayView with some bottom padding
+                        .padding(.bottom, 60)
+                        
+                        // The scrubber is overlaid on top but does not push the other view.
+                        VideoScrubberView(
+                            currentTime: $currentTime,
+                            totalDuration: $totalDuration,
+                            onScrub: { newTime in
+                                guard let player = player else { return }
+                                let target = CMTime(seconds: newTime, preferredTimescale: 600)
+                                player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
+                            }
+                        )
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 20)
+                    }
+                    .ignoresSafeArea(),
                     alignment: .bottom
                 )
-                .padding(.bottom, 10)
-                .padding(.leading, 10)
             }
         }
-        .onAppear { setupPlayer() }
-        .onDisappear { cleanupPlayer() }
+        .onAppear {
+            setupPlayer()
+            observeComments()
+        }
+        .onDisappear {
+            cleanupPlayer()
+        }
         .onChange(of: activePage) { newValue in
-            if newValue != index { player?.pause() } else { player?.play() }
+            if newValue != index {
+                player?.pause()
+            } else {
+                player?.play()
+            }
         }
         .sheet(isPresented: $showComments) {
             CommentsView(videoID: video.id)
@@ -111,32 +147,30 @@ struct VideoCellView: View {
 
     private func togglePlayback() {
         guard let player = player else { return }
-        if player.rate == 0 { player.play() } else { player.pause() }
+        player.rate == 0 ? player.play() : player.pause()
     }
 
     private func setupPlayer() {
-        _ = db.collection("videos").document(video.id)
-            .collection("comments")
-            .addSnapshotListener { snapshot, _ in
-                commentsCount = snapshot?.documents.count ?? 0
-            }
-
+        guard player == nil else { return }
         if let preloaded = preloadedPlayer {
             player = preloaded
             isLoading = false
+            attachTimeObserver(to: preloaded)
+            updateDuration(preloaded.currentItem)
         } else {
             isLoading = true
             DispatchQueue.global(qos: .background).async {
-                let asset = AVURLAsset(url: video.videoURL,
+                let asset = AVURLAsset(url: self.video.videoURL,
                                        options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
-                let keys = ["playable", "preferredTransform"]
+                let keys = ["playable", "preferredTransform", "duration"]
                 asset.loadValuesAsynchronously(forKeys: keys) {
                     DispatchQueue.main.async {
                         var allLoaded = true
                         for key in keys {
                             var error: NSError?
-                            let status = asset.statusOfValue(forKey: key, error: &error)
-                            if status != .loaded { allLoaded = false }
+                            if asset.statusOfValue(forKey: key, error: &error) != .loaded {
+                                allLoaded = false
+                            }
                         }
                         if allLoaded {
                             let item = AVPlayerItem(asset: asset)
@@ -144,7 +178,6 @@ struct VideoCellView: View {
                             let newPlayer = AVPlayer(playerItem: item)
                             newPlayer.actionAtItemEnd = .none
                             newPlayer.automaticallyWaitsToMinimizeStalling = true
-
                             NotificationCenter.default.addObserver(
                                 forName: .AVPlayerItemDidPlayToEndTime,
                                 object: item,
@@ -154,6 +187,8 @@ struct VideoCellView: View {
                                 newPlayer.play()
                             }
                             self.player = newPlayer
+                            self.attachTimeObserver(to: newPlayer)
+                            self.updateDuration(item)
                         }
                         self.isLoading = false
                     }
@@ -162,12 +197,40 @@ struct VideoCellView: View {
         }
     }
 
+    private func observeComments() {
+        _ = db.collection("videos").document(video.id)
+            .collection("comments")
+            .addSnapshotListener { snapshot, _ in
+                commentsCount = snapshot?.documents.count ?? 0
+            }
+    }
+
     private func cleanupPlayer() {
-        player?.pause()
-        player?.replaceCurrentItem(with: nil)
+        if let player = player {
+            player.pause()
+            if let token = timeObserverToken {
+                player.removeTimeObserver(token)
+            }
+        }
         NotificationCenter.default.removeObserver(self)
         player = nil
         isLoading = false
+        timeObserverToken = nil
+    }
+
+    private func attachTimeObserver(to avPlayer: AVPlayer) {
+        let interval = CMTimeMakeWithSeconds(0.5, preferredTimescale: 600)
+        timeObserverToken = avPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
+            self.currentTime = time.seconds
+        }
+    }
+
+    private func updateDuration(_ item: AVPlayerItem?) {
+        guard let item = item else { return }
+        let durationSeconds = item.asset.duration.seconds
+        if durationSeconds.isFinite && durationSeconds > 0 {
+            totalDuration = durationSeconds
+        }
     }
 }
 
@@ -200,7 +263,9 @@ private struct BottomOverlayView: View {
                             .font(.system(size: 14))
                             .foregroundColor(.white)
                             .onTapGesture {
-                                if !isCaptionExpanded { withAnimation { isCaptionExpanded = true } }
+                                if !isCaptionExpanded {
+                                    withAnimation { isCaptionExpanded = true }
+                                }
                             }
                         if video.caption.count > 50 && isCaptionExpanded {
                             if video.caption.count > 200 {
