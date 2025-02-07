@@ -308,8 +308,15 @@ private struct BottomOverlayView: View {
                         }
                     }
                 }
-                // Date text removed.
             }
+            .padding(8)
+            .background(isCaptionExpanded ? Color.black.opacity(0.3) : Color.clear)
+            .cornerRadius(8)
+            .shadow(
+                color: isCaptionExpanded ? Color.black.opacity(0.8) : Color.clear,
+                radius: isCaptionExpanded ? 4 : 0,
+                x: 0, y: 2
+            )
             Spacer()
             VideoSidebarView(
                 numLikes: likesCount,
