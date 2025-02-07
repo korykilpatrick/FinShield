@@ -47,7 +47,7 @@ struct VideoCellView: View {
     var body: some View {
         GeometryReader { _ in
             ZStack {
-                // VIDEO LAYER: Plays the video full-screen.
+                // VIDEO LAYER
                 Group {
                     if let player = player {
                         CustomVideoPlayer(player: player, onTap: {
@@ -71,7 +71,7 @@ struct VideoCellView: View {
                         Color.black.ignoresSafeArea()
                     }
                 }
-                // INTERACTIVE OVERLAY: Captures nav, sidebar, and caption taps.
+                // INTERACTIVE OVERLAY
                 .overlay(
                     BottomOverlayView(
                         video: video,
@@ -94,11 +94,11 @@ struct VideoCellView: View {
                         onComment: {
                             showComments = true
                         }
-                    )
-//                    .padding(.horizontal)
-                    .padding(.bottom, 20),
+                    ),
                     alignment: .bottom
                 )
+                .padding(.bottom, 10)
+                .padding(.leading, 4)
             }
         }
         .onAppear {
@@ -107,14 +107,10 @@ struct VideoCellView: View {
         .onDisappear {
             cleanupPlayer()
         }
-        // Also, update the onChange block to log page changes:
         .onChange(of: activePage) { newValue in
-            print("[VideoCellView] activePage changed: \(newValue) for index \(index)")
             if newValue != index {
-                print("[VideoCellView] Not active page – pausing player")
                 player?.pause()
             } else {
-                print("[VideoCellView] Active page – playing player")
                 player?.play()
             }
         }
@@ -123,23 +119,16 @@ struct VideoCellView: View {
         }
     }
 
-    // Inside VideoCellView, update the togglePlayback function:
     private func togglePlayback() {
-        guard let player = player else {
-            print("[VideoCellView] togglePlayback: player is nil")
-            return
-        }
+        guard let player = player else { return }
         if player.rate == 0 {
-            print("[VideoCellView] togglePlayback: player is paused; calling play()")
             player.play()
         } else {
-            print("[VideoCellView] togglePlayback: player is playing; calling pause()")
             player.pause()
         }
     }
 
     private func setupPlayer() {
-        // Listen for comment updates.
         _ = db.collection("videos").document(video.id)
             .collection("comments")
             .addSnapshotListener { snapshot, _ in
@@ -170,7 +159,6 @@ struct VideoCellView: View {
                             newPlayer.actionAtItemEnd = .none
                             newPlayer.automaticallyWaitsToMinimizeStalling = true
 
-                            // Loop video when it ends.
                             NotificationCenter.default.addObserver(
                                 forName: .AVPlayerItemDidPlayToEndTime,
                                 object: item,
@@ -288,7 +276,7 @@ private struct BottomOverlayView: View {
             )
         }
         .padding(.leading, 5)
-        .padding(.vertical, 10)
+        .padding(.vertical, 5)
         .background(
             LinearGradient(
                 gradient: Gradient(colors: [.clear, .black.opacity(0.3)]),
