@@ -107,10 +107,14 @@ struct VideoCellView: View {
         .onDisappear {
             cleanupPlayer()
         }
+        // Also, update the onChange block to log page changes:
         .onChange(of: activePage) { newValue in
+            print("[VideoCellView] activePage changed: \(newValue) for index \(index)")
             if newValue != index {
+                print("[VideoCellView] Not active page – pausing player")
                 player?.pause()
             } else {
+                print("[VideoCellView] Active page – playing player")
                 player?.play()
             }
         }
@@ -119,11 +123,17 @@ struct VideoCellView: View {
         }
     }
 
+    // Inside VideoCellView, update the togglePlayback function:
     private func togglePlayback() {
-        guard let player = player else { return }
+        guard let player = player else {
+            print("[VideoCellView] togglePlayback: player is nil")
+            return
+        }
         if player.rate == 0 {
+            print("[VideoCellView] togglePlayback: player is paused; calling play()")
             player.play()
         } else {
+            print("[VideoCellView] togglePlayback: player is playing; calling pause()")
             player.pause()
         }
     }
