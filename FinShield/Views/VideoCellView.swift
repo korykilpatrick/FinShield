@@ -55,9 +55,7 @@ struct VideoCellView: View {
                         })
                         .ignoresSafeArea()
                         .onAppear {
-                            if activePage == index {
-                                player.play()
-                            }
+                            if activePage == index { player.play() }
                         }
                         .onDisappear {
                             player.pause()
@@ -101,18 +99,10 @@ struct VideoCellView: View {
                 .padding(.leading, 10)
             }
         }
-        .onAppear {
-            setupPlayer()
-        }
-        .onDisappear {
-            cleanupPlayer()
-        }
+        .onAppear { setupPlayer() }
+        .onDisappear { cleanupPlayer() }
         .onChange(of: activePage) { newValue in
-            if newValue != index {
-                player?.pause()
-            } else {
-                player?.play()
-            }
+            if newValue != index { player?.pause() } else { player?.play() }
         }
         .sheet(isPresented: $showComments) {
             CommentsView(videoID: video.id)
@@ -121,11 +111,7 @@ struct VideoCellView: View {
 
     private func togglePlayback() {
         guard let player = player else { return }
-        if player.rate == 0 {
-            player.play()
-        } else {
-            player.pause()
-        }
+        if player.rate == 0 { player.play() } else { player.pause() }
     }
 
     private func setupPlayer() {
@@ -208,33 +194,17 @@ private struct BottomOverlayView: View {
                 Text(video.videoTitle)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(displayedCaption)
-                        .font(.system(size: 14))
-                        .foregroundColor(.white)
-                        .onTapGesture {
-                            if !isCaptionExpanded {
-                                withAnimation { isCaptionExpanded = true }
+                if !video.caption.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(displayedCaption)
+                            .font(.system(size: 14))
+                            .foregroundColor(.white)
+                            .onTapGesture {
+                                if !isCaptionExpanded { withAnimation { isCaptionExpanded = true } }
                             }
-                        }
-                    if video.caption.count > 50 && isCaptionExpanded {
-                        if video.caption.count > 200 {
-                            if isCaptionFullyExpanded {
-                                Button("Show Less") {
-                                    withAnimation {
-                                        isCaptionExpanded = false
-                                        isCaptionFullyExpanded = false
-                                    }
-                                }
-                                .font(.caption)
-                                .foregroundColor(.blue)
-                            } else {
-                                HStack {
-                                    Button("Show More") {
-                                        withAnimation { isCaptionFullyExpanded = true }
-                                    }
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
+                        if video.caption.count > 50 && isCaptionExpanded {
+                            if video.caption.count > 200 {
+                                if isCaptionFullyExpanded {
                                     Button("Show Less") {
                                         withAnimation {
                                             isCaptionExpanded = false
@@ -243,24 +213,40 @@ private struct BottomOverlayView: View {
                                     }
                                     .font(.caption)
                                     .foregroundColor(.blue)
+                                } else {
+                                    HStack {
+                                        Button("Show More") {
+                                            withAnimation { isCaptionFullyExpanded = true }
+                                        }
+                                        .font(.caption)
+                                        .foregroundColor(.blue)
+                                        Button("Show Less") {
+                                            withAnimation {
+                                                isCaptionExpanded = false
+                                                isCaptionFullyExpanded = false
+                                            }
+                                        }
+                                        .font(.caption)
+                                        .foregroundColor(.blue)
+                                    }
                                 }
-                            }
-                        } else {
-                            Button("Show Less") {
-                                withAnimation {
-                                    isCaptionExpanded = false
-                                    isCaptionFullyExpanded = false
+                            } else {
+                                Button("Show Less") {
+                                    withAnimation {
+                                        isCaptionExpanded = false
+                                        isCaptionFullyExpanded = false
+                                    }
                                 }
+                                .font(.caption)
+                                .foregroundColor(.blue)
                             }
-                            .font(.caption)
-                            .foregroundColor(.blue)
                         }
                     }
                 }
                 Text(DateUtils.formattedDate(from: video.timestamp))
                     .font(.system(size: 12))
                     .foregroundColor(.white)
-                    .padding(.bottom, 10)
+                    .padding(.bottom, video.caption.isEmpty ? 12 : 10)
             }
             Spacer()
             VideoSidebarView(
