@@ -1,7 +1,6 @@
 import SwiftUI
 import AVKit
 import FirebaseFirestore
-import Foundation
 
 struct VideoCellView: View {
     let video: Video
@@ -10,7 +9,6 @@ struct VideoCellView: View {
     @Binding var activePage: Int
 
     @State private var player: AVPlayer?
-    @State private var playerError: Error?
     @State private var isLoading = true
 
     @State private var isLiked = false
@@ -26,7 +24,6 @@ struct VideoCellView: View {
 
     private let db = Firestore.firestore()
 
-    // Compute a shortened caption as needed.
     private var displayedCaption: String {
         if !isCaptionExpanded {
             return video.caption.count > 50 ? String(video.caption.prefix(50)) + "..." : video.caption
@@ -48,9 +45,9 @@ struct VideoCellView: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { _ in
             ZStack {
-                // VIDEO LAYER: Full-screen video player.
+                // VIDEO LAYER: Plays the video full-screen.
                 Group {
                     if let player = player {
                         CustomVideoPlayer(player: player, onTap: {
@@ -58,14 +55,11 @@ struct VideoCellView: View {
                         })
                         .ignoresSafeArea()
                         .onAppear {
-                            print("[VideoCellView] onAppear => Start video \(video.id), index=\(index).")
                             if activePage == index {
                                 player.play()
-                                print("[VideoCellView] Auto-play => video \(video.id).")
                             }
                         }
                         .onDisappear {
-                            print("[VideoCellView] onDisappear => Pause video \(video.id).")
                             player.pause()
                         }
                     } else if isLoading {
@@ -73,69 +67,55 @@ struct VideoCellView: View {
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             .background(Color.black)
                             .ignoresSafeArea()
-                            .onAppear {
-                                print("[VideoCellView] isLoading => video \(video.id).")
-                            }
                     } else {
                         Color.black.ignoresSafeArea()
                     }
                 }
-            }
-            // INTERACTIVE OVERLAY: Only covers the bottom area.
-            .overlay(
-                BottomOverlayView(
-                    video: video,
-                    displayedCaption: displayedCaption,
-                    isCaptionExpanded: $isCaptionExpanded,
-                    isCaptionFullyExpanded: $isCaptionFullyExpanded,
-                    likesCount: $likesCount,
-                    bookmarksCount: $bookmarksCount,
-                    commentsCount: commentsCount,
-                    isLiked: isLiked,
-                    isBookmarked: isBookmarked,
-                    onLike: {
-                        isLiked.toggle()
-                        likesCount += isLiked ? 1 : -1
-                        print("[VideoCellView] onLike => isLiked=\(isLiked), total=\(likesCount). VideoID=\(video.id)")
-                    },
-                    onBookmark: {
-                        isBookmarked.toggle()
-                        bookmarksCount += isBookmarked ? 1 : -1
-                        print("[VideoCellView] onBookmark => isBookmarked=\(isBookmarked), total=\(bookmarksCount). VideoID=\(video.id)")
-                    },
-                    onComment: {
-                        showComments = true
-                        print("[VideoCellView] onComment => show sheet => VideoID=\(video.id)")
-                    }
+                // INTERACTIVE OVERLAY: Captures nav, sidebar, and caption taps.
+                .overlay(
+                    BottomOverlayView(
+                        video: video,
+                        displayedCaption: displayedCaption,
+                        isCaptionExpanded: $isCaptionExpanded,
+                        isCaptionFullyExpanded: $isCaptionFullyExpanded,
+                        likesCount: $likesCount,
+                        bookmarksCount: $bookmarksCount,
+                        commentsCount: commentsCount,
+                        isLiked: isLiked,
+                        isBookmarked: isBookmarked,
+                        onLike: {
+                            isLiked.toggle()
+                            likesCount += isLiked ? 1 : -1
+                        },
+                        onBookmark: {
+                            isBookmarked.toggle()
+                            bookmarksCount += isBookmarked ? 1 : -1
+                        },
+                        onComment: {
+                            showComments = true
+                        }
+                    )
+                    .padding(.horizontal)
+                    .padding(.bottom, 20),
+                    alignment: .bottom
                 )
-                .padding(.horizontal)
-                .padding(.bottom, 20),  // increased bottom padding for extra room
-                alignment: .bottom
-            )
+            }
         }
         .onAppear {
-            print("[VideoCellView] onAppear => setupPlayer => video \(video.id), index=\(index).")
             setupPlayer()
         }
         .onDisappear {
-            print("[VideoCellView] onDisappear => cleanupPlayer => video \(video.id), index=\(index).")
             cleanupPlayer()
         }
         .onChange(of: activePage) { newValue in
             if newValue != index {
                 player?.pause()
-                print("[VideoCellView] onChange(of: activePage) => pausing video \(video.id). newValue=\(newValue).")
             } else {
-                if let p = player, p.rate == 0 {
-                    p.play()
-                    print("[VideoCellView] onChange => playing video \(video.id). newValue=\(newValue).")
-                }
+                player?.play()
             }
         }
         .sheet(isPresented: $showComments) {
             CommentsView(videoID: video.id)
-                .presentationDetents([.fraction(0.85)])
-                .presentationDragIndicator(.visible)
         }
     }
 
@@ -143,68 +123,44 @@ struct VideoCellView: View {
         guard let player = player else { return }
         if player.rate == 0 {
             player.play()
-            print("[VideoCellView] togglePlayback => playing video \(video.id).")
         } else {
             player.pause()
-            print("[VideoCellView] togglePlayback => paused video \(video.id).")
         }
     }
 
     private func setupPlayer() {
-        let startTime = Date()
-        print("[VideoCellView] setupPlayer => started at \(startTime). VideoID=\(video.id)")
-        
         // Listen for comment updates.
         _ = db.collection("videos").document(video.id)
             .collection("comments")
             .addSnapshotListener { snapshot, _ in
                 commentsCount = snapshot?.documents.count ?? 0
-                print("[VideoCellView] Comments updated => count=\(commentsCount). VideoID=\(video.id)")
             }
-        
+
         if let preloaded = preloadedPlayer {
-            playerError = nil
-            isLoading = false
             player = preloaded
-            let elapsed = Date().timeIntervalSince(startTime)
-            print("[VideoCellView] Using preloaded player => video \(video.id), load time=\(elapsed)s.")
+            isLoading = false
         } else {
             isLoading = true
             DispatchQueue.global(qos: .background).async {
-                let asset = AVURLAsset(url: self.video.videoURL, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+                let asset = AVURLAsset(url: video.videoURL,
+                                       options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
                 let keys = ["playable", "preferredTransform"]
-                
                 asset.loadValuesAsynchronously(forKeys: keys) {
                     DispatchQueue.main.async {
                         var allLoaded = true
                         for key in keys {
                             var error: NSError?
                             let status = asset.statusOfValue(forKey: key, error: &error)
-                            print("[VideoCellView] Key='\(key)' => status=\(status.rawValue). VideoID=\(self.video.id)")
-                            if status != .loaded {
-                                allLoaded = false
-                                self.playerError = error
-                                break
-                            }
+                            if status != .loaded { allLoaded = false }
                         }
-                        
                         if allLoaded {
                             let item = AVPlayerItem(asset: asset)
                             item.preferredForwardBufferDuration = 5.0
                             let newPlayer = AVPlayer(playerItem: item)
                             newPlayer.actionAtItemEnd = .none
                             newPlayer.automaticallyWaitsToMinimizeStalling = true
-                            
-                            NotificationCenter.default.addObserver(
-                                forName: .AVPlayerItemFailedToPlayToEndTime,
-                                object: item,
-                                queue: .main
-                            ) { notification in
-                                if let err = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error {
-                                    self.playerError = err
-                                    print("[VideoCellView] FailedToPlayToEnd => \(err). VideoID=\(self.video.id)")
-                                }
-                            }
+
+                            // Loop video when it ends.
                             NotificationCenter.default.addObserver(
                                 forName: .AVPlayerItemDidPlayToEndTime,
                                 object: item,
@@ -212,19 +168,10 @@ struct VideoCellView: View {
                             ) { _ in
                                 newPlayer.seek(to: .zero)
                                 newPlayer.play()
-                                print("[VideoCellView] Video ended => looping video \(self.video.id).")
                             }
-                            
                             self.player = newPlayer
-                            self.isLoading = false
-                            print("[VideoCellView] Fallback loaded => success => video \(self.video.id).")
-                        } else {
-                            self.isLoading = false
-                            print("[VideoCellView] Fallback load => failed => video \(self.video.id).")
                         }
-                        
-                        let elapsed = Date().timeIntervalSince(startTime)
-                        print("[VideoCellView] setupPlayer done => took \(elapsed)s => video \(self.video.id).")
+                        self.isLoading = false
                     }
                 }
             }
@@ -232,7 +179,6 @@ struct VideoCellView: View {
     }
 
     private func cleanupPlayer() {
-        print("[VideoCellView] cleanupPlayer => video \(video.id).")
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         NotificationCenter.default.removeObserver(self)
@@ -271,7 +217,6 @@ private struct BottomOverlayView: View {
                         .onTapGesture {
                             if !isCaptionExpanded {
                                 withAnimation { isCaptionExpanded = true }
-                                print("[BottomOverlayView] Expanding caption => video \(video.id)")
                             }
                         }
                     if video.caption.count > 50 && isCaptionExpanded {
@@ -282,7 +227,6 @@ private struct BottomOverlayView: View {
                                         isCaptionExpanded = false
                                         isCaptionFullyExpanded = false
                                     }
-                                    print("[BottomOverlayView] Collapsing caption => video \(video.id)")
                                 }
                                 .font(.caption)
                                 .foregroundColor(.blue)
@@ -290,17 +234,14 @@ private struct BottomOverlayView: View {
                                 HStack {
                                     Button("Show More") {
                                         withAnimation { isCaptionFullyExpanded = true }
-                                        print("[BottomOverlayView] Fully expanding => video \(video.id)")
                                     }
                                     .font(.caption)
                                     .foregroundColor(.blue)
-                                    
                                     Button("Show Less") {
                                         withAnimation {
                                             isCaptionExpanded = false
                                             isCaptionFullyExpanded = false
                                         }
-                                        print("[BottomOverlayView] Collapsing caption => video \(video.id)")
                                     }
                                     .font(.caption)
                                     .foregroundColor(.blue)
@@ -312,14 +253,12 @@ private struct BottomOverlayView: View {
                                     isCaptionExpanded = false
                                     isCaptionFullyExpanded = false
                                 }
-                                print("[BottomOverlayView] Collapsing caption => video \(video.id)")
                             }
                             .font(.caption)
                             .foregroundColor(.blue)
                         }
                     }
                 }
-                // Add extra bottom padding here so the date isn’t clipped.
                 Text(DateUtils.formattedDate(from: video.timestamp))
                     .font(.system(size: 12))
                     .foregroundColor(.white)
