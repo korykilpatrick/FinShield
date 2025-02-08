@@ -10,10 +10,11 @@ struct CustomPageView: UIViewControllerRepresentable {
     }
 
     func makeUIViewController(context: Context) -> UIPageViewController {
+        let options = [UIPageViewController.OptionsKey.interPageSpacing: 10]
         let pageVC = UIPageViewController(
             transitionStyle: .scroll,
-            navigationOrientation: .horizontal,
-            options: nil
+            navigationOrientation: .vertical,
+            options: options
         )
         pageVC.dataSource = context.coordinator
         pageVC.delegate = context.coordinator
