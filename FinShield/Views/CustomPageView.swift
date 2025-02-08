@@ -38,22 +38,20 @@ struct CustomPageView: UIViewControllerRepresentable {
             self.parent = parent
         }
 
-        // Return the previous page.
         func pageViewController(_ pageViewController: UIPageViewController,
                                 viewControllerBefore viewController: UIViewController) -> UIViewController? {
-            guard let index = parent.pages.firstIndex(of: viewController as! UIHostingController<AnyView>),
-                  index > 0 else { return nil }
-            return parent.pages[index - 1]
+            guard let index = parent.pages.firstIndex(of: viewController as! UIHostingController<AnyView>) else { return nil }
+            let prevIndex = index - 1
+            return prevIndex < 0 ? parent.pages.last : parent.pages[prevIndex]
         }
 
-        // Return the next page.
         func pageViewController(_ pageViewController: UIPageViewController,
                                 viewControllerAfter viewController: UIViewController) -> UIViewController? {
-            guard let index = parent.pages.firstIndex(of: viewController as! UIHostingController<AnyView>),
-                  index < parent.pages.count - 1 else { return nil }
-            return parent.pages[index + 1]
+            guard let index = parent.pages.firstIndex(of: viewController as! UIHostingController<AnyView>) else { return nil }
+            let nextIndex = index + 1
+            return nextIndex >= parent.pages.count ? parent.pages.first : parent.pages[nextIndex]
         }
-
+        
         func pageViewController(_ pageViewController: UIPageViewController,
                                 didFinishAnimating finished: Bool,
                                 previousViewControllers: [UIViewController],

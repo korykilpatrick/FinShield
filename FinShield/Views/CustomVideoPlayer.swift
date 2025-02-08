@@ -27,7 +27,7 @@ struct CustomVideoPlayer: UIViewControllerRepresentable {
         let controller = LoggingAVPlayerViewController()
         controller.player = player
         controller.showsPlaybackControls = false
-        controller.videoGravity = .resizeAspectFill
+        controller.videoGravity = .resizeAspect
 
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         tap.delegate = context.coordinator
