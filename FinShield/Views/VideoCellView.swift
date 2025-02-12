@@ -29,6 +29,11 @@ struct VideoCellView: View {
     @State private var totalDuration: Double = 1
     @State private var timeObserverToken: Any?
 
+    // Fact-check overlay states
+    @State private var shownFactCheckIDs = Set<String>()
+    @State private var factCheckPopups: [FactCheckResult] = []
+    @State private var showPopupOverlay = false
+
     @EnvironmentObject var scrubbingManager: ScrubbingManager
 
     private let db = Firestore.firestore()
@@ -64,6 +69,7 @@ struct VideoCellView: View {
                         })
                         .ignoresSafeArea()
                         .onAppear {
+                            print("[VideoCellView] onAppear: activePage = \(activePage), index = \(index)")
                             if activePage == index {
                                 player.play()
                             }
@@ -80,10 +86,36 @@ struct VideoCellView: View {
                         Color.black.ignoresSafeArea()
                     }
                 }
+                // Overlays
+                .overlay(
+                    ZStack(alignment: .topTrailing) {
+                        // Fact-check popup overlays, displayed at top-right
+                        VStack(spacing: 8) {
+                            ForEach(factCheckPopups, id: \.id) { fc in
+                                HStack(alignment: .center, spacing: 6) {
+                                    Image(systemName: "exclamationmark.triangle")
+                                        .foregroundColor(.yellow)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(fc.claimText)
+                                            .font(.caption)
+                                            .bold()
+                                    }
+                                }
+                                .padding(8)
+                                .background(Color.black.opacity(0.7))
+                                .cornerRadius(8)
+                                .transition(.move(edge: .top))
+                            }
+                            Spacer()
+                        }
+                        .padding(.top, 50)
+                        .padding(.trailing, 16)
+                    },
+                    alignment: .topTrailing
+                )
                 // Bottom overlay (caption and sidebar)
                 .overlay(
                     ZStack(alignment: .bottom) {
-                        // The video data (caption and sidebar) remains fixed.
                         BottomOverlayView(
                             video: video,
                             displayedCaption: displayedCaption,
@@ -105,10 +137,8 @@ struct VideoCellView: View {
                             onComment: { showComments = true }
                         )
                         .opacity(scrubbingManager.isScrubbing ? 0 : 1)
-                        // Position the BottomOverlayView with some bottom padding
                         .padding(.bottom, 60)
                         
-                        // The scrubber is overlaid on top but does not push the other view.
                         VideoScrubberView(
                             currentTime: $currentTime,
                             totalDuration: $totalDuration,
@@ -149,7 +179,7 @@ struct VideoCellView: View {
         guard let player = player else { return }
         player.rate == 0 ? player.play() : player.pause()
     }
-
+    
     private func setupPlayer() {
         guard player == nil else { return }
         if let preloaded = preloadedPlayer {
@@ -168,69 +198,76 @@ struct VideoCellView: View {
                         var allLoaded = true
                         for key in keys {
                             var error: NSError?
-                            if asset.statusOfValue(forKey: key, error: &error) != .loaded {
+                            let status = asset.statusOfValue(forKey: key, error: &error)
+                            if status != .loaded {
                                 allLoaded = false
+                                break
                             }
                         }
                         if allLoaded {
                             let item = AVPlayerItem(asset: asset)
-                            item.preferredForwardBufferDuration = 5.0
                             let newPlayer = AVPlayer(playerItem: item)
-                            newPlayer.actionAtItemEnd = .none
-                            newPlayer.automaticallyWaitsToMinimizeStalling = true
-                            NotificationCenter.default.addObserver(
-                                forName: .AVPlayerItemDidPlayToEndTime,
-                                object: item,
-                                queue: .main
-                            ) { _ in
-                                newPlayer.seek(to: .zero)
+                            self.player = newPlayer
+                            self.isLoading = false
+                            self.updateDuration(item)
+                            self.attachTimeObserver(to: newPlayer)
+                            if self.activePage == self.index {
                                 newPlayer.play()
                             }
-                            self.player = newPlayer
-                            self.attachTimeObserver(to: newPlayer)
-                            self.updateDuration(item)
+                        } else {
+                            self.isLoading = false
                         }
-                        self.isLoading = false
                     }
                 }
             }
         }
     }
-
-    private func observeComments() {
-        _ = db.collection("videos").document(video.id)
-            .collection("comments")
-            .addSnapshotListener { snapshot, _ in
-                commentsCount = snapshot?.documents.count ?? 0
-            }
-    }
-
-    private func cleanupPlayer() {
-        if let player = player {
-            player.pause()
-            if let token = timeObserverToken {
-                player.removeTimeObserver(token)
-            }
-        }
-        NotificationCenter.default.removeObserver(self)
-        player = nil
-        isLoading = false
-        timeObserverToken = nil
-    }
-
-    private func attachTimeObserver(to avPlayer: AVPlayer) {
-        let interval = CMTimeMakeWithSeconds(0.5, preferredTimescale: 600)
-        timeObserverToken = avPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
-            self.currentTime = time.seconds
-        }
-    }
-
+    
     private func updateDuration(_ item: AVPlayerItem?) {
         guard let item = item else { return }
-        let durationSeconds = item.asset.duration.seconds
-        if durationSeconds.isFinite && durationSeconds > 0 {
+        let durationSeconds = CMTimeGetSeconds(item.duration)
+        if durationSeconds > 1 {
             totalDuration = durationSeconds
         }
+    }
+    
+    private func observeComments() {
+        // Placeholder for comments observation.
+    }
+    
+    private func attachTimeObserver(to avPlayer: AVPlayer) {
+        let interval = CMTimeMakeWithSeconds(0.25, preferredTimescale: 600)
+        timeObserverToken = avPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
+            let secs = CMTimeGetSeconds(time)
+            print("[VideoCellView] Time observer update: currentTime = \(secs)")
+            self.currentTime = secs
+            self.maybeShowFactCheckPopup(forTime: secs)
+        }
+    }
+    
+    private func maybeShowFactCheckPopup(forTime currentT: Double) {
+        print("[VideoCellView] Checking fact-check popups at currentTime: \(currentT)")
+        for fc in video.factCheckResults {
+            print("[VideoCellView] Evaluating fact-check result id: \(fc.id) with endTime: \(fc.endTime) (currentTime: \(currentT))")
+            if currentT >= fc.endTime, !shownFactCheckIDs.contains(fc.id) {
+                print("[VideoCellView] Triggering popup for fact-check result id: \(fc.id)")
+                shownFactCheckIDs.insert(fc.id)
+                factCheckPopups.append(fc)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    if let idx = self.factCheckPopups.firstIndex(where: { $0.id == fc.id }) {
+                        print("[VideoCellView] Removing popup for fact-check result id: \(fc.id) after delay")
+                        self.factCheckPopups.remove(at: idx)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func cleanupPlayer() {
+        if let token = timeObserverToken, let player = player {
+            player.removeTimeObserver(token)
+        }
+        timeObserverToken = nil
     }
 }
 

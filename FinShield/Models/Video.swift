@@ -1,6 +1,26 @@
 import Foundation
 import FirebaseFirestore
 
+// MARK: - Fact Check Models
+struct FactCheckSource: Identifiable, Equatable {
+    let id: String
+    let confidence: Double
+    let explanation: String
+    let referenceLinks: [String]
+    let sourceName: String
+    let type: String
+    let verification: String
+}
+
+struct FactCheckResult: Identifiable, Equatable {
+    let id: String
+    let claimText: String
+    let startTime: TimeInterval
+    let endTime: TimeInterval
+    let sources: [FactCheckSource]
+}
+
+// MARK: - Video Model
 struct Video: Identifiable, Equatable {
     let id: String
     let videoName: String
@@ -13,7 +33,11 @@ struct Video: Identifiable, Equatable {
     let numLikes: Int
     let numBookmarks: Int
     let numShares: Int
-
+    
+    // New fields for fact-check integration
+    var status: String
+    var factCheckResults: [FactCheckResult]
+    
     init?(from dict: [String: Any], id: String) {
         guard
             let urlString = dict["videoURL"] as? String,
@@ -47,5 +71,11 @@ struct Video: Identifiable, Equatable {
         self.numLikes = dict["numLikes"] as? Int ?? 0
         self.numBookmarks = dict["numBookmarks"] as? Int ?? 0
         self.numShares = dict["numShares"] as? Int ?? 0
+        
+        // If missing status, treat as "pending"
+        self.status = dict["status"] as? String ?? "pending"
+        
+        // We won't parse factCheckResults in init; the view model does it after a second fetch
+        self.factCheckResults = []
     }
 }

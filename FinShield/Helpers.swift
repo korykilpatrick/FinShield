@@ -29,3 +29,16 @@ extension Int {
         }
     }
 }
+
+// New: parseSRTTime utility
+func parseSRTTime(_ timeString: String) -> TimeInterval {
+    // Format: HH:MM:SS,mmm => e.g. "00:01:10,500"
+    let parts = timeString.split(separator: ":") // ["00","01","10,500"]
+    guard parts.count == 3 else { return 0 }
+    let hours = Double(parts[0]) ?? 0
+    let minutes = Double(parts[1]) ?? 0
+    let secMillis = parts[2].split(separator: ",")
+    let secs = Double(secMillis.first ?? "0") ?? 0
+    let millis = Double(secMillis.last ?? "0") ?? 0
+    return hours * 3600 + minutes * 60 + secs + (millis / 1000.0)
+}
