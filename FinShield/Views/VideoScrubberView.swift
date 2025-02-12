@@ -28,10 +28,10 @@ struct VideoScrubberView: View {
                     ForEach(factCheckResults, id: \.id) { fc in
                         let normalizedPosition = fc.endTime / totalDuration
                         if normalizedPosition >= 0 && normalizedPosition <= 1 {
-                            Rectangle()
-                                .fill(Color.yellow)
-                                .frame(width: 2, height: 8)
-                                .offset(x: normalizedPosition * trackWidth - 1, y: -10)
+                            Circle()
+                                .fill(Color.white.opacity(0.5))
+                                .frame(width: 8, height: 8)
+                                .offset(x: normalizedPosition * trackWidth - 3, y: 0)
                         }
                     }
                 }
