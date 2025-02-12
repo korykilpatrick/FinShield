@@ -29,8 +29,7 @@ struct VideoCellView: View {
     @State private var totalDuration: Double = 1
     @State private var timeObserverToken: Any?
 
-    // Fact-check overlay states
-    @State private var shownFactCheckIDs = Set<String>()
+    // Fact‑check popup state: active popups based solely on timestamp
     @State private var factCheckPopups: [FactCheckResult] = []
     
     @EnvironmentObject var scrubbingManager: ScrubbingManager
@@ -64,9 +63,7 @@ struct VideoCellView: View {
                     if let player = player {
                         CustomVideoPlayer(player: player, onTap: { togglePlayback() })
                             .ignoresSafeArea()
-                            .onAppear {
-                                if activePage == index { player.play() }
-                            }
+                            .onAppear { if activePage == index { player.play() } }
                             .onDisappear { player.pause() }
                     } else if isLoading {
                         ProgressView()
@@ -77,7 +74,7 @@ struct VideoCellView: View {
                         Color.black.ignoresSafeArea()
                     }
                 }
-                // Fact-check popups overlay at top-right
+                // Fact‑check popups overlay at top‑right
                 .overlay(
                     ZStack(alignment: .topTrailing) {
                         VStack(spacing: 8) {
@@ -216,24 +213,17 @@ struct VideoCellView: View {
         timeObserverToken = avPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
             let secs = CMTimeGetSeconds(time)
             self.currentTime = secs
-            self.maybeShowFactCheckPopup(forTime: secs)
+            self.updateActivePopup(forTime: secs)
         }
     }
     
-    /// Displays a popup when the current time passes a fact-check's end time.
-    private func maybeShowFactCheckPopup(forTime currentT: Double) {
-        for fc in viewModel.factCheckResults {
-            if currentT >= fc.endTime, !shownFactCheckIDs.contains(fc.id) {
-                shownFactCheckIDs.insert(fc.id)
-                withAnimation { factCheckPopups.append(fc) }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    withAnimation {
-                        if let idx = self.factCheckPopups.firstIndex(where: { $0.id == fc.id }) {
-                            self.factCheckPopups.remove(at: idx)
-                        }
-                    }
-                }
-            }
+    /// Update active fact‑check popups based on the current time.
+    /// A popup is active only if the current time is within a small tolerance of its designated timestamp.
+    private func updateActivePopup(forTime currentT: Double) {
+        let tolerance = 0.25
+        let active = viewModel.factCheckResults.filter { abs($0.endTime - currentT) < tolerance }
+        withAnimation {
+            factCheckPopups = active
         }
     }
     
