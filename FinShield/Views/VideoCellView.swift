@@ -29,7 +29,7 @@ struct VideoCellView: View {
     @State private var totalDuration: Double = 1
     @State private var timeObserverToken: Any?
 
-    // Fact‑check popup state: active popups based solely on timestamp
+    // Fact‑check popup state: active popups determined solely by timestamp
     @State private var factCheckPopups: [FactCheckResult] = []
     
     @EnvironmentObject var scrubbingManager: ScrubbingManager
@@ -218,10 +218,9 @@ struct VideoCellView: View {
     }
     
     /// Update active fact‑check popups based on the current time.
-    /// A popup is active only if the current time is within a small tolerance of its designated timestamp.
+    /// A popup is active if currentTime is between its designated timestamp (T) and T+3 seconds.
     private func updateActivePopup(forTime currentT: Double) {
-        let tolerance = 0.25
-        let active = viewModel.factCheckResults.filter { abs($0.endTime - currentT) < tolerance }
+        let active = viewModel.factCheckResults.filter { currentT >= $0.endTime && currentT < $0.endTime + 3 }
         withAnimation {
             factCheckPopups = active
         }
