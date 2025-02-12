@@ -4,6 +4,7 @@ struct VideoScrubberView: View {
     @Binding var currentTime: Double
     @Binding var totalDuration: Double
     var onScrub: (Double) -> Void
+    var factCheckResults: [FactCheckResult] // New parameter
 
     @GestureState private var isPressing = false
     @State private var isExpanded = false
@@ -17,12 +18,30 @@ struct VideoScrubberView: View {
             let sliderPosition = normalizedValue * trackWidth
 
             ZStack(alignment: .leading) {
+                // Background scrubber track
                 Rectangle()
                     .fill(Color.white.opacity(0.3))
                     .frame(height: 4)
+                
+                // Fact-check markers: one notch per fact-check result
+                if totalDuration > 0 {
+                    ForEach(factCheckResults, id: \.id) { fc in
+                        let normalizedPosition = fc.endTime / totalDuration
+                        if normalizedPosition >= 0 && normalizedPosition <= 1 {
+                            Rectangle()
+                                .fill(Color.yellow)
+                                .frame(width: 2, height: 8)
+                                .offset(x: normalizedPosition * trackWidth - 1, y: -10)
+                        }
+                    }
+                }
+                
+                // Filled portion of the track
                 Rectangle()
                     .fill(Color.white)
                     .frame(width: sliderPosition, height: 4)
+                
+                // Slider thumb
                 Circle()
                     .fill(Color.white)
                     .frame(width: isExpanded ? 24 : 12, height: isExpanded ? 24 : 12)
@@ -30,7 +49,7 @@ struct VideoScrubberView: View {
                     .shadow(radius: isExpanded ? 5 : 0)
             }
             .frame(height: isExpanded ? 40 : 20)
-            .contentShape(Rectangle()) // ensure the whole width is hittable
+            .contentShape(Rectangle())
             .highPriorityGesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { drag in

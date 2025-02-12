@@ -3,7 +3,7 @@ import AVKit
 import FirebaseFirestore
 
 struct VideoCellView: View {
-    let video: Video
+    @ObservedObject var viewModel: VideoCellViewModel
     let preloadedPlayer: AVPlayer?
     let index: Int
     @Binding var activePage: Int
@@ -32,13 +32,11 @@ struct VideoCellView: View {
     // Fact-check overlay states
     @State private var shownFactCheckIDs = Set<String>()
     @State private var factCheckPopups: [FactCheckResult] = []
-    @State private var showPopupOverlay = false
-
+    
     @EnvironmentObject var scrubbingManager: ScrubbingManager
 
-    private let db = Firestore.firestore()
-
     private var displayedCaption: String {
+        let video = viewModel.video
         if !isCaptionExpanded {
             return video.caption.count > 50 ? String(video.caption.prefix(50)) + "..." : video.caption
         } else if !isCaptionFullyExpanded {
@@ -48,14 +46,14 @@ struct VideoCellView: View {
         }
     }
 
-    init(video: Video, preloadedPlayer: AVPlayer?, index: Int, activePage: Binding<Int>) {
-        self.video = video
+    init(viewModel: VideoCellViewModel, preloadedPlayer: AVPlayer?, index: Int, activePage: Binding<Int>) {
+        self.viewModel = viewModel
         self.preloadedPlayer = preloadedPlayer
         self.index = index
         self._activePage = activePage
-        _likesCount = State(initialValue: video.numLikes)
-        _bookmarksCount = State(initialValue: video.numBookmarks)
-        _sharesCount = State(initialValue: video.numShares)
+        _likesCount = State(initialValue: viewModel.video.numLikes)
+        _bookmarksCount = State(initialValue: viewModel.video.numBookmarks)
+        _sharesCount = State(initialValue: viewModel.video.numShares)
     }
 
     var body: some View {
@@ -64,19 +62,12 @@ struct VideoCellView: View {
                 // Video layer
                 Group {
                     if let player = player {
-                        CustomVideoPlayer(player: player, onTap: {
-                            togglePlayback()
-                        })
-                        .ignoresSafeArea()
-                        .onAppear {
-                            print("[VideoCellView] onAppear: activePage = \(activePage), index = \(index)")
-                            if activePage == index {
-                                player.play()
+                        CustomVideoPlayer(player: player, onTap: { togglePlayback() })
+                            .ignoresSafeArea()
+                            .onAppear {
+                                if activePage == index { player.play() }
                             }
-                        }
-                        .onDisappear {
-                            player.pause()
-                        }
+                            .onDisappear { player.pause() }
                     } else if isLoading {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
@@ -86,20 +77,17 @@ struct VideoCellView: View {
                         Color.black.ignoresSafeArea()
                     }
                 }
-                // Overlays
+                // Fact-check popups overlay at top-right
                 .overlay(
                     ZStack(alignment: .topTrailing) {
-                        // Fact-check popup overlays, displayed at top-right
                         VStack(spacing: 8) {
                             ForEach(factCheckPopups, id: \.id) { fc in
                                 HStack(alignment: .center, spacing: 6) {
                                     Image(systemName: "exclamationmark.triangle")
                                         .foregroundColor(.yellow)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(fc.claimText)
-                                            .font(.caption)
-                                            .bold()
-                                    }
+                                    Text(fc.claimText)
+                                        .font(.caption)
+                                        .bold()
                                 }
                                 .padding(8)
                                 .background(Color.black.opacity(0.7))
@@ -117,7 +105,7 @@ struct VideoCellView: View {
                 .overlay(
                     ZStack(alignment: .bottom) {
                         BottomOverlayView(
-                            video: video,
+                            video: viewModel.video,
                             displayedCaption: displayedCaption,
                             isCaptionExpanded: $isCaptionExpanded,
                             isCaptionFullyExpanded: $isCaptionFullyExpanded,
@@ -146,7 +134,8 @@ struct VideoCellView: View {
                                 guard let player = player else { return }
                                 let target = CMTime(seconds: newTime, preferredTimescale: 600)
                                 player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
-                            }
+                            },
+                            factCheckResults: viewModel.factCheckResults
                         )
                         .padding(.horizontal, 20)
                         .padding(.bottom, 30)
@@ -160,20 +149,16 @@ struct VideoCellView: View {
             setupPlayer()
             observeComments()
         }
-        .onDisappear {
-            cleanupPlayer()
-        }
+        .onDisappear { cleanupPlayer() }
         .onChange(of: activePage) { newValue in
-            if newValue != index {
-                player?.pause()
-            } else {
-                player?.play()
-            }
+            newValue != index ? player?.pause() : player?.play()
         }
         .sheet(isPresented: $showComments) {
-            CommentsView(videoID: video.id)
+            CommentsView(videoID: viewModel.video.id)
         }
     }
+
+    // MARK: - Helper Methods
 
     private func togglePlayback() {
         guard let player = player else { return }
@@ -190,19 +175,14 @@ struct VideoCellView: View {
         } else {
             isLoading = true
             DispatchQueue.global(qos: .background).async {
-                let asset = AVURLAsset(url: self.video.videoURL,
+                let asset = AVURLAsset(url: viewModel.video.videoURL,
                                        options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
                 let keys = ["playable", "preferredTransform", "duration"]
                 asset.loadValuesAsynchronously(forKeys: keys) {
                     DispatchQueue.main.async {
-                        var allLoaded = true
-                        for key in keys {
+                        let allLoaded = keys.allSatisfy { key in
                             var error: NSError?
-                            let status = asset.statusOfValue(forKey: key, error: &error)
-                            if status != .loaded {
-                                allLoaded = false
-                                break
-                            }
+                            return asset.statusOfValue(forKey: key, error: &error) == .loaded
                         }
                         if allLoaded {
                             let item = AVPlayerItem(asset: asset)
@@ -211,9 +191,7 @@ struct VideoCellView: View {
                             self.isLoading = false
                             self.updateDuration(item)
                             self.attachTimeObserver(to: newPlayer)
-                            if self.activePage == self.index {
-                                newPlayer.play()
-                            }
+                            if self.activePage == self.index { newPlayer.play() }
                         } else {
                             self.isLoading = false
                         }
@@ -226,9 +204,7 @@ struct VideoCellView: View {
     private func updateDuration(_ item: AVPlayerItem?) {
         guard let item = item else { return }
         let durationSeconds = CMTimeGetSeconds(item.duration)
-        if durationSeconds > 1 {
-            totalDuration = durationSeconds
-        }
+        if durationSeconds > 1 { totalDuration = durationSeconds }
     }
     
     private func observeComments() {
@@ -239,24 +215,22 @@ struct VideoCellView: View {
         let interval = CMTimeMakeWithSeconds(0.25, preferredTimescale: 600)
         timeObserverToken = avPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
             let secs = CMTimeGetSeconds(time)
-            print("[VideoCellView] Time observer update: currentTime = \(secs)")
             self.currentTime = secs
             self.maybeShowFactCheckPopup(forTime: secs)
         }
     }
     
+    /// Displays a popup when the current time passes a fact-check's end time.
     private func maybeShowFactCheckPopup(forTime currentT: Double) {
-        print("[VideoCellView] Checking fact-check popups at currentTime: \(currentT)")
-        for fc in video.factCheckResults {
-            print("[VideoCellView] Evaluating fact-check result id: \(fc.id) with endTime: \(fc.endTime) (currentTime: \(currentT))")
+        for fc in viewModel.factCheckResults {
             if currentT >= fc.endTime, !shownFactCheckIDs.contains(fc.id) {
-                print("[VideoCellView] Triggering popup for fact-check result id: \(fc.id)")
                 shownFactCheckIDs.insert(fc.id)
-                factCheckPopups.append(fc)
+                withAnimation { factCheckPopups.append(fc) }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    if let idx = self.factCheckPopups.firstIndex(where: { $0.id == fc.id }) {
-                        print("[VideoCellView] Removing popup for fact-check result id: \(fc.id) after delay")
-                        self.factCheckPopups.remove(at: idx)
+                    withAnimation {
+                        if let idx = self.factCheckPopups.firstIndex(where: { $0.id == fc.id }) {
+                            self.factCheckPopups.remove(at: idx)
+                        }
                     }
                 }
             }
